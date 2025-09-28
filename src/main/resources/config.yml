@@ -137,7 +137,8 @@ messages:
 
   # Регистрация
   register-usage: "§cИспользование: /register <пароль> <повтор_пароля>"
-  register-success: "§aРегистрация успешна! Теперь войдите с помощью /login <пароль>"
+#  register-success: "§aРегистрация успешна! Теперь войдите с помощью /login <пароль>"
+  register-success: "§aРегистрация успешна! Перенапраялем на сервер..."
   register-already-registered: "§cВы уже зарегистрированы! Используйте /login <пароль>"
   register-passwords-not-match: "§cПароли не совпадают!"
   register-weak-password: |

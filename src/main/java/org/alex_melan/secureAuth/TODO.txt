@@ -1,5 +1,15 @@
-Есть проблема с запоминанием режима игры (креатив, приключение и тд) + есть проблема с запоминанием координат и направления взгляда при выходе с сервера. Меня уже несколько раз за пять минут теста возвращало туда, откуда я ушёл. Мы можем отслеживать точную позицию в событии выхода игрока? Я знаю, что можем, так что предлагаю добавить это. Может, что-то не так с кешем? Я понимаю, что он нужен, но мы можем его принудительно обновлять?
-При вводе команды /logout игрока не выкидывает с сервера. Да, его разлогинило, но он остался на сервере и даже не попал в лобби.
-В самом лобби лишь один блок стекла и тот не под ногами у игрока, из-за чего может возникнуть неприятная ситуация с allow-flight на сервере.
-Должна быть хотя бы платформа. Пересмотри код генерации лобби.
-При выводе информации о требованиях к паролю, не происходит форматирования и прямо в тексте фигурные скобки с переменныеми. "От {min} до {max} символов"
+После перезапуска сервера, мне всё равно выдаёт режим выживания, хотя я выходил с сервера в режиме креатива. И разлогинивался тоже.
+
+Я проверил, что сбрасывается режим при logout.
+
+И получаю такую ошибку при выключении сервера
+[20:44:28 ERROR]: [SecureAuth] Ошибка деактивации сессии
+java.sql.SQLException: HikariDataSource HikariDataSource (HikariPool-1) has been closed.
+        at org.alex_melan.secureAuth.libs.hikari.HikariDataSource.getConnection(HikariDataSource.java:95) ~[SecureAuth-1.0-SNAPSHOT.jar:?]
+        at org.alex_melan.secureAuth.database.DatabaseManager.lambda$invalidateSession$8(DatabaseManager.java:437) ~[SecureAuth-1.0-SNAPSHOT.jar:?]
+        at java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1848) ~[?:?]
+        at java.util.concurrent.CompletableFuture$AsyncRun.exec(CompletableFuture.java:1840) ~[?:?]
+        at java.util.concurrent.ForkJoinTask.doExec(ForkJoinTask.java:507) ~[?:?]
+        at java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(ForkJoinPool.java:1460) ~[?:?]
+        at java.util.concurrent.ForkJoinPool.runWorker(ForkJoinPool.java:2036) ~[?:?]
+        at java.util.concurrent.ForkJoinWorkerThread.run(ForkJoinWorkerThread.java:189) ~[?:?]
