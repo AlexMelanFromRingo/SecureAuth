@@ -71,55 +71,40 @@ processResources {
     }
 }
 
-//shadowJar {
-//    archiveFileName = "${project.name}-${project.version}.jar"
-//
-//    // Relocate только те библиотеки, которые могут конфликтовать
-//    relocate 'com.zaxxer.hikari', 'org.alex_melan.secureAuth.libs.hikari'
-//    relocate 'org.mindrot.jbcrypt', 'org.alex_melan.secureAuth.libs.bcrypt'
-//
-//    // НЕ перемещаем SQLite драйвер - оставляем org.xerial.* как есть
-//    // Это критично для правильной работы JDBC драйвера
-//
-//    // Исключаем ненужные файлы для уменьшения размера
-//    exclude 'META-INF/NOTICE*'
-//    exclude 'META-INF/LICENSE*'
-//    exclude 'META-INF/DEPENDENCIES*'
-//    exclude 'META-INF/*.SF'
-//    exclude 'META-INF/*.DSA'
-//    exclude 'META-INF/*.RSA'
-//    exclude 'META-INF/maven/**'
-//    // НЕ исключаем META-INF/services/ - там находится информация о драйверах
-//
-//    // НЕ используем minimize с JDBC драйверами
-//    // minimize может удалить критичные классы драйвера
-//
-//    // Добавляем манифест для корректной работы
-//    manifest {
-//        attributes(
-//                'Implementation-Title': project.name,
-//                'Implementation-Version': project.version
-//        )
-//    }
-//}
-
 shadowJar {
-    // Переименовываем итоговый файл
     archiveFileName = "${project.name}-${project.version}.jar"
 
     // Relocate зависимостей во избежание конфликтов
     relocate 'com.zaxxer.hikari', 'org.alex_melan.secureAuth.libs.hikari'
     relocate 'org.mindrot.jbcrypt', 'org.alex_melan.secureAuth.libs.bcrypt'
-//    relocate 'org.xerial', 'org.alex_melan.secureAuth.libs.xerial'
+
+    // НЕ relocate SQLite драйвер - это критично для JDBC
+    // relocate 'org.xerial', 'org.alex_melan.secureAuth.libs.xerial'
+
+    // Исключаем ненужные файлы
+    exclude 'META-INF/NOTICE*'
+    exclude 'META-INF/LICENSE*'
+    exclude 'META-INF/DEPENDENCIES*'
+    exclude 'META-INF/*.SF'
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
+    exclude 'META-INF/maven/**'
+
+    // НЕ исключаем META-INF/services/ - там драйверы
 
     manifest {
         attributes(
                 'Implementation-Title': project.name,
-                'Implementation-Version': project.version
+                'Implementation-Version': project.version,
+                'Implementation-Vendor': 'Alex Melan'
         )
     }
-    // Минимизируем размер JAR
-    minimize()
+
+    // Минимизируем только если не критично для драйверов
+    minimize {
+        exclude(dependency('org.xerial:.*'))
+        exclude(dependency('com.zaxxer:.*'))
+    }
 }
 
 build.dependsOn shadowJar

@@ -1,90 +1,222 @@
-# SecureAuth Configuration
+# ===============================================
+#            SecureAuth Configuration
+# ===============================================
+# Конфигурация плагина авторизации для серверов
+# с offline-mode = true
+#
+# Автор: Alex Melan
+# Версия: 1.0-SNAPSHOT
+# ===============================================
 
 # База данных
 database:
-  type: sqlite # sqlite, mysql, postgresql
+  # Тип БД: sqlite, mysql, postgresql
+  type: sqlite
+
+  # Настройки для MySQL/PostgreSQL
   host: localhost
   port: 3306
   database: secureauth
   username: root
   password: ""
 
+  # Дополнительные параметры соединения
+  connection_properties:
+    useSSL: false
+    autoReconnect: true
+    characterEncoding: utf8
+    useUnicode: true
+
 # Настройки сессий
 session:
-  ttl-hours: 24 # Время жизни сессии в часах
-  cleanup-interval-minutes: 5 # Интервал очистки просроченных сессий
+  # Время жизни сессии в часах (1-720 часов = 30 дней)
+  ttl-hours: 24
+
+  # Интервал очистки просроченных сессий в минутах
+  cleanup-interval-minutes: 5
 
 # Безопасность
 security:
   # Защита от брутфорса
-  max-login-attempts: 5 # Максимум попыток входа с одного IP
-  login-block-minutes: 15 # Время блокировки IP после превышения попыток
+  max-login-attempts: 5         # Максимум попыток входа с одного IP
+  login-block-minutes: 15       # Время блокировки IP после превышения попыток
 
   # Сложность паролей
-  enforce-password-complexity: true # Требовать сложные пароли
-  min-password-length: 8
-  max-password-length: 32
+  enforce-password-complexity: true  # Требовать сложные пароли
+  min-password-length: 8            # Минимальная длина пароля
+  max-password-length: 32           # Максимальная длина пароля
+  # Поддерживаемые спецсимволы: @$!%*?&.,_-+=~`|[]{}():;"'<>/\^#
+  # Примеры валидных паролей: [MyPass123], !PASS!, {Secret}Pass123
 
   # Защита от смены IP
-  enable-ip-check: true # Проверять смену IP адреса
-  ip-change-grace-minutes: 30 # Время после которого смена IP требует реавторизации
+  enable-ip-check: true             # Проверять смену IP адреса
+  ip-change-grace-minutes: 30       # Время после которого смена IP требует реавторизации
 
   # BCrypt настройки
-  bcrypt-rounds: 12 # Сложность хеширования (не менее 10, не более 15)
+  bcrypt-rounds: 12                 # Сложность хеширования (10-15)
 
 # Лобби авторизации
 lobby:
-  world: world # Мир для лобби
+  # Мир для лобби (если не существует - создается автоматически)
+  world: auth_lobby
+
+  # Координаты спавна в лобби
   x: 0.5
   y: 100
   z: 0.5
   yaw: 0
   pitch: 0
 
+  # Автоматическое создание платформы
+  auto-create-platform: true
+
+  # Высота платформы от точки спавна
+  platform-offset: -1
+
+# Дополнительные настройки
+misc:
+  # Автоматическое сохранение данных игроков (в минутах)
+  auto-save-interval-minutes: 5
+
+  # Логирование событий
+  log-successful-logins: true
+  log-failed-logins: true
+  log-registrations: true
+  log-security-events: true
+
+  # UUID объединение
+  enable-uuid-linking: true        # Автоматическая привязка premium UUID к аккаунту
+
+  # Стартовые предметы для новых игроков
+  give-starter-items: false
+  starter-items:
+    - "BREAD:5"
+    - "WOODEN_SWORD:1"
+    - "WOODEN_PICKAXE:1"
+
+  # Очистка старых данных
+  cleanup-old-sessions-days: 30    # Удалять сессии старше N дней
+  cleanup-old-logs-days: 90        # Удалять логи старше N дней
+
+# Производительность
+performance:
+  # Размер пула соединений с БД
+  database-pool-size: 10
+
+  # Кеширование данных игроков
+  enable-player-cache: true
+  cache-expire-minutes: 30
+
+  # Асинхронная обработка
+  async-save-data: true
+  async-load-data: true
+
+# Интеграции
+integrations:
+  # Поддержка PlaceholderAPI
+  placeholderapi: true
+
+  # Поддержка DiscordSRV
+  discordsrv: false
+
+  # Веб-панель администратора
+  web-panel:
+    enabled: false
+    port: 8080
+    secret-key: "change_this_secret"
+
 # Сообщения
 messages:
   prefix: "§8[§6SecureAuth§8]§r "
 
+  # Общие сообщения
+  plugin-reload: "§aКонфигурация перезагружена!"
+  no-permission: "§cУ вас нет прав для выполнения этой команды!"
+  player-only: "§cЭта команда доступна только игрокам!"
+  unknown-command: "§cНеизвестная подкоманда! Используйте /secureauth help"
+
   # Регистрация
   register-usage: "§cИспользование: /register <пароль> <повтор_пароля>"
-  register-success: "§aРегистрация успешна! Войдите с помощью /login <пароль>"
+  register-success: "§aРегистрация успешна! Теперь войдите с помощью /login <пароль>"
   register-already-registered: "§cВы уже зарегистрированы! Используйте /login <пароль>"
   register-passwords-not-match: "§cПароли не совпадают!"
-  register-weak-password: "§cПароль слишком слабый! Требования:"
-  register-error: "§cОшибка регистрации!"
+  register-weak-password: |
+    §cПароль слишком слабый! Требования:
+    §7• От {min} до {max} символов
+    §7• Минимум одна заглавная буква
+    §7• Минимум одна строчная буква  
+    §7• Минимум одна цифра
+  register-error: "§cОшибка регистрации! Попробуйте позже."
 
   # Авторизация
   login-usage: "§cИспользование: /login <пароль>"
-  login-success: "§aУспешная авторизация! Добро пожаловать!"
+  login-success: "§aУспешная авторизация! Добро пожаловать на сервер!"
   login-wrong-password: "§cНеверный пароль!"
   login-not-registered: "§cВы не зарегистрированы! Используйте /register <пароль> <повтор>"
   login-already-authenticated: "§cВы уже авторизованы!"
-  login-blocked: "§cСлишком много неудачных попыток! Попробуйте через {time} минут."
-  login-session-restored: "§aСессия восстановлена!"
+  login-blocked: "§cСлишком много неудачных попыток! Попробуйте через §e{time}§c минут."
+  login-session-restored: "§aСессия восстановлена! Добро пожаловать обратно!"
   login-ip-changed: "§eОбнаружена смена IP адреса. Требуется повторная авторизация."
 
-  # Общие
+  # Системные сообщения
   auth-required: "§cДля продолжения необходимо авторизоваться!"
   command-blocked: "§cДля использования команд авторизуйтесь!"
   chat-blocked: "§cДля использования чата авторизуйтесь!"
+  force-logout: "§cВы были принудительно разлогинены администратором!"
 
   # Инструкции в лобби
-  auth-lobby-title: "§c=== ТРЕБУЕТСЯ АВТОРИЗАЦИЯ ==="
-  auth-lobby-instructions: |
-    §7Для продолжения игры введите:
-    §e/login <пароль> §7- для входа
-    §e/register <пароль> <повтор> §7- для регистрации
-  auth-lobby-footer: "§c=============================="
+  auth-lobby-title: "§c§l=== ТРЕБУЕТСЯ АВТОРИЗАЦИЯ ==="
+  auth-lobby-welcome-new: |
+    §7Добро пожаловать на сервер, §e{player}§7!
+    §7Создайте аккаунт: §a/register <пароль> <повтор>
+  auth-lobby-welcome-back: |
+    §7Добро пожаловать обратно, §e{player}§7!
+    §7Введите: §a/login <пароль>
+  auth-lobby-password-requirements: |
+    §7§lТребования к паролю:
+    §7• От {min} до {max} символов
+    §7• Заглавные и строчные буквы
+    §7• Минимум одна цифра
+  auth-lobby-footer: "§c§l================================"
 
-# Дополнительные настройки
-misc:
-  # Автоматическое сохранение данных игроков
-  auto-save-interval-minutes: 5
+  # Админ команды
+  admin-help: |
+    §6=== SecureAuth Admin ===
+    §e/secureauth reload §7- перезагрузить конфигурацию
+    §e/secureauth forcelogout <игрок> §7- принудительный выход
+    §e/secureauth sessions §7- показать активные сессии
+    §e/secureauth cleanup §7- очистить просроченные сессии
+    §e/secureauth stats §7- статистика плагина
+    §e/secureauth info <игрок> §7- информация об игроке
 
-  # Логирование
-  log-successful-logins: true
-  log-failed-logins: true
-  log-registrations: true
+  admin-forcelogout-success: "§aИгрок §e{player}§a принудительно разлогинен!"
+  admin-forcelogout-offline: "§cИгрок не найден или не в сети!"
+  admin-sessions-info: "§eАктивных сессий: §a{count}"
+  admin-cleanup-success: "§aОчистка просроченных сессий запущена!"
+  admin-player-info: |
+    §6=== Информация об игроке {player} ===
+    §7Зарегистрирован: §e{registered}
+    §7Последний вход: §e{last_login}
+    §7Последний IP: §e{last_ip}
+    §7Активная сессия: §e{session}
+    §7Premium UUID: §e{premium_uuid}
 
-  # UUID объединение
-  enable-uuid-linking: true # Автоматическая привязка premium UUID к аккаунту
+  # Ошибки
+  error-database: "§cОшибка базы данных! Обратитесь к администратору."
+  error-session: "§cОшибка создания сессии! Попробуйте перезайти."
+  error-load-data: "§cОшибка загрузки данных игрока!"
+  error-save-data: "§cОшибка сохранения данных игрока!"
+
+# Отладка
+debug:
+  # Включить отладочные сообщения
+  enabled: false
+
+  # Логировать SQL запросы
+  log-sql: false
+
+  # Логировать сессии
+  log-sessions: false
+
+  # Детальное логирование ошибок
+  verbose-errors: true

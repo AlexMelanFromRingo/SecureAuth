@@ -1,5 +1,6 @@
 package org.alex_melan.secureAuth.models;
 
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -13,8 +14,12 @@ import java.io.ByteArrayOutputStream;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.UUID;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class PlayerData {
+
+    private static final Logger LOGGER = Logger.getLogger(PlayerData.class.getName());
 
     private String username;
     private String passwordHash;
@@ -38,9 +43,17 @@ public class PlayerData {
     private double health;
     private int food;
     private float saturation;
+    private String gameMode;
+
+    // Системные поля
+    private long createdAt;
+    private long updatedAt;
 
     public PlayerData(String username) {
         this.username = username.toLowerCase();
+        this.gameMode = "SURVIVAL"; // Значение по умолчанию
+        this.createdAt = System.currentTimeMillis();
+        this.updatedAt = System.currentTimeMillis();
     }
 
     public static PlayerData fromResultSet(ResultSet rs) throws SQLException {
@@ -50,16 +63,32 @@ public class PlayerData {
         data.salt = rs.getString("salt");
 
         String premiumUuidStr = rs.getString("premium_uuid");
-        if (premiumUuidStr != null) {
-            data.premiumUuid = UUID.fromString(premiumUuidStr);
+        if (premiumUuidStr != null && !premiumUuidStr.isEmpty()) {
+            try {
+                data.premiumUuid = UUID.fromString(premiumUuidStr);
+            } catch (IllegalArgumentException e) {
+                LOGGER.log(Level.WARNING, "Некорректный premium UUID для пользователя " + data.username + ": " + premiumUuidStr);
+            }
         }
 
-        data.crackedUuid = UUID.fromString(rs.getString("cracked_uuid"));
+        String crackedUuidStr = rs.getString("cracked_uuid");
+        if (crackedUuidStr != null && !crackedUuidStr.isEmpty()) {
+            try {
+                data.crackedUuid = UUID.fromString(crackedUuidStr);
+            } catch (IllegalArgumentException e) {
+                LOGGER.log(Level.WARNING, "Некорректный cracked UUID для пользователя " + data.username + ": " + crackedUuidStr);
+            }
+        }
+
         data.lastIp = rs.getString("last_ip");
         data.lastLogin = rs.getLong("last_login");
         data.registrationDate = rs.getLong("registration_date");
 
         data.worldName = rs.getString("world_name");
+        if (data.worldName == null) {
+            data.worldName = "world"; // Значение по умолчанию
+        }
+
         data.x = rs.getDouble("x");
         data.y = rs.getDouble("y");
         data.z = rs.getDouble("z");
@@ -74,62 +103,147 @@ public class PlayerData {
         data.food = rs.getInt("food");
         data.saturation = rs.getFloat("saturation");
 
+        data.gameMode = rs.getString("game_mode");
+        if (data.gameMode == null) {
+            data.gameMode = "SURVIVAL"; // Значение по умолчанию
+        }
+
+        data.createdAt = rs.getLong("created_at");
+        data.updatedAt = rs.getLong("updated_at");
+
         return data;
     }
 
     public void saveFromPlayer(Player player) {
-        Location loc = player.getLocation();
-        this.worldName = loc.getWorld().getName();
-        this.x = loc.getX();
-        this.y = loc.getY();
-        this.z = loc.getZ();
-        this.yaw = loc.getYaw();
-        this.pitch = loc.getPitch();
+        try {
+            Location loc = player.getLocation();
+            this.worldName = loc.getWorld().getName();
+            this.x = loc.getX();
+            this.y = loc.getY();
+            this.z = loc.getZ();
+            this.yaw = loc.getYaw();
+            this.pitch = loc.getPitch();
 
-        this.inventoryData = serializeInventory(player.getInventory().getContents());
-        this.enderchestData = serializeInventory(player.getEnderChest().getContents());
-        this.experience = player.getTotalExperience();
-        this.level = player.getLevel();
-        this.health = player.getHealth();
-        this.food = player.getFoodLevel();
-        this.saturation = player.getSaturation();
+            this.inventoryData = serializeInventory(player.getInventory().getContents());
+            this.enderchestData = serializeInventory(player.getEnderChest().getContents());
+            this.experience = player.getTotalExperience();
+            this.level = player.getLevel();
+            this.health = player.getHealth();
+            this.food = player.getFoodLevel();
+            this.saturation = player.getSaturation();
+            this.gameMode = player.getGameMode().name();
+
+            this.updatedAt = System.currentTimeMillis();
+
+            LOGGER.info("Данные игрока " + username + " сохранены: мир=" + worldName +
+                    ", координаты=(" + Math.round(x) + "," + Math.round(y) + "," + Math.round(z) + ")");
+
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Ошибка сохранения данных игрока " + username, e);
+            throw new RuntimeException("Не удалось сохранить данные игрока", e);
+        }
     }
 
     public void applyToPlayer(Player player, World defaultWorld) {
-        // Восстановление местоположения
-        World world = player.getServer().getWorld(worldName);
-        if (world == null) {
-            world = defaultWorld;
-        }
-
-        Location location = new Location(world, x, y, z, yaw, pitch);
-        player.teleport(location);
-
-        // Восстановление инвентаря
-        if (inventoryData != null) {
-            ItemStack[] inventory = deserializeInventory(inventoryData);
-            if (inventory != null) {
-                player.getInventory().setContents(inventory);
+        try {
+            // Восстановление местоположения
+            World world = player.getServer().getWorld(worldName);
+            if (world == null) {
+                LOGGER.warning("Мир " + worldName + " не найден для игрока " + username + ", используется " + defaultWorld.getName());
+                world = defaultWorld;
             }
-        }
 
-        if (enderchestData != null) {
-            ItemStack[] enderchest = deserializeInventory(enderchestData);
-            if (enderchest != null) {
-                player.getEnderChest().setContents(enderchest);
+            // Проверка безопасности координат
+            double safeY = Math.max(-64, Math.min(320, y));
+            if (safeY != y) {
+                LOGGER.warning("Некорректная Y координата " + y + " для игрока " + username + ", используется " + safeY);
             }
+
+            Location location = new Location(world, x, safeY, z, yaw, pitch);
+
+            // Проверяем что локация безопасна
+            if (isLocationSafe(location)) {
+                player.teleport(location);
+            } else {
+                LOGGER.warning("Небезопасная локация для игрока " + username + ", телепортируем на спавн");
+                player.teleport(world.getSpawnLocation());
+            }
+
+            // Восстановление игрового режима
+            try {
+                GameMode mode = GameMode.valueOf(gameMode.toUpperCase());
+                player.setGameMode(mode);
+            } catch (IllegalArgumentException e) {
+                LOGGER.warning("Некорректный игровой режим " + gameMode + " для игрока " + username + ", используется SURVIVAL");
+                player.setGameMode(GameMode.SURVIVAL);
+            }
+
+            // Восстановление инвентаря
+            if (inventoryData != null && !inventoryData.isEmpty()) {
+                ItemStack[] inventory = deserializeInventory(inventoryData);
+                if (inventory != null) {
+                    player.getInventory().setContents(inventory);
+                } else {
+                    LOGGER.warning("Не удалось восстановить инвентарь для игрока " + username);
+                }
+            }
+
+            if (enderchestData != null && !enderchestData.isEmpty()) {
+                ItemStack[] enderchest = deserializeInventory(enderchestData);
+                if (enderchest != null) {
+                    player.getEnderChest().setContents(enderchest);
+                } else {
+                    LOGGER.warning("Не удалось восстановить эндер-сундук для игрока " + username);
+                }
+            }
+
+            // Восстановление статов с проверками
+            player.setTotalExperience(Math.max(0, experience));
+            player.setLevel(Math.max(0, level));
+
+            double safeHealth = Math.max(0.5, Math.min(player.getMaxHealth(), health));
+            player.setHealth(safeHealth);
+
+            player.setFoodLevel(Math.max(0, Math.min(20, food)));
+            player.setSaturation(Math.max(0, Math.min(20, saturation)));
+
+            LOGGER.info("Данные игрока " + username + " восстановлены успешно");
+
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Ошибка восстановления данных игрока " + username, e);
+
+            // В случае критической ошибки отправляем на спавн с базовыми настройками
+            player.teleport(defaultWorld.getSpawnLocation());
+            player.setGameMode(GameMode.SURVIVAL);
+            player.getInventory().clear();
+            player.setHealth(player.getMaxHealth());
+            player.setFoodLevel(20);
+            player.setSaturation(5.0f);
+        }
+    }
+
+    private boolean isLocationSafe(Location location) {
+        if (location == null || location.getWorld() == null) {
+            return false;
         }
 
-        // Восстановление статов
-        player.setTotalExperience(experience);
-        player.setLevel(level);
-        player.setHealth(Math.min(health, player.getMaxHealth()));
-        player.setFoodLevel(food);
-        player.setSaturation(saturation);
+        // Проверяем что координаты в разумных пределах
+        if (location.getY() < -64 || location.getY() > 320) {
+            return false;
+        }
+
+        // Можно добавить дополнительные проверки безопасности
+        // например, проверка на лаву, пустоту и т.д.
+
+        return true;
     }
 
     private String serializeInventory(ItemStack[] items) {
         try {
+            if (items == null) {
+                return null;
+            }
+
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             BukkitObjectOutputStream dataOutput = new BukkitObjectOutputStream(outputStream);
 
@@ -140,7 +254,9 @@ public class PlayerData {
 
             dataOutput.close();
             return Base64Coder.encodeLines(outputStream.toByteArray());
+
         } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Ошибка сериализации инвентаря для игрока " + username, e);
             return null;
         }
     }
@@ -163,9 +279,45 @@ public class PlayerData {
 
             dataInput.close();
             return items;
+
         } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Ошибка десериализации инвентаря для игрока " + username, e);
             return null;
         }
+    }
+
+    // Создание данных для нового игрока
+    public static PlayerData createNewPlayer(String username, String passwordHash, String salt, UUID crackedUuid) {
+        PlayerData data = new PlayerData(username);
+        data.passwordHash = passwordHash;
+        data.salt = salt;
+        data.crackedUuid = crackedUuid;
+        data.registrationDate = System.currentTimeMillis();
+        data.lastLogin = System.currentTimeMillis();
+
+        // Значения по умолчанию для нового игрока
+        data.worldName = "world";
+        data.x = 0;
+        data.y = 64;
+        data.z = 0;
+        data.yaw = 0;
+        data.pitch = 0;
+        data.experience = 0;
+        data.level = 0;
+        data.health = 20;
+        data.food = 20;
+        data.saturation = 5.0f;
+        data.gameMode = "SURVIVAL";
+
+        return data;
+    }
+
+    // Валидация данных
+    public boolean isValid() {
+        return username != null && !username.isEmpty()
+                && passwordHash != null && !passwordHash.isEmpty()
+                && salt != null && !salt.isEmpty()
+                && crackedUuid != null;
     }
 
     // Геттеры и сеттеры
@@ -231,5 +383,19 @@ public class PlayerData {
 
     public float getSaturation() { return saturation; }
     public void setSaturation(float saturation) { this.saturation = saturation; }
-}
 
+    public String getGameMode() { return gameMode; }
+    public void setGameMode(String gameMode) { this.gameMode = gameMode; }
+
+    public long getCreatedAt() { return createdAt; }
+    public void setCreatedAt(long createdAt) { this.createdAt = createdAt; }
+
+    public long getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(long updatedAt) { this.updatedAt = updatedAt; }
+
+    @Override
+    public String toString() {
+        return String.format("PlayerData{username='%s', worldName='%s', gameMode='%s', lastLogin=%d}",
+                username, worldName, gameMode, lastLogin);
+    }
+}
