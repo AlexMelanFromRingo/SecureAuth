@@ -1,0 +1,90 @@
+# SecureAuth Configuration
+
+# База данных
+database:
+  type: sqlite # sqlite, mysql, postgresql
+  host: localhost
+  port: 3306
+  database: secureauth
+  username: root
+  password: ""
+
+# Настройки сессий
+session:
+  ttl-hours: 24 # Время жизни сессии в часах
+  cleanup-interval-minutes: 5 # Интервал очистки просроченных сессий
+
+# Безопасность
+security:
+  # Защита от брутфорса
+  max-login-attempts: 5 # Максимум попыток входа с одного IP
+  login-block-minutes: 15 # Время блокировки IP после превышения попыток
+
+  # Сложность паролей
+  enforce-password-complexity: true # Требовать сложные пароли
+  min-password-length: 8
+  max-password-length: 32
+
+  # Защита от смены IP
+  enable-ip-check: true # Проверять смену IP адреса
+  ip-change-grace-minutes: 30 # Время после которого смена IP требует реавторизации
+
+  # BCrypt настройки
+  bcrypt-rounds: 12 # Сложность хеширования (не менее 10, не более 15)
+
+# Лобби авторизации
+lobby:
+  world: world # Мир для лобби
+  x: 0.5
+  y: 100
+  z: 0.5
+  yaw: 0
+  pitch: 0
+
+# Сообщения
+messages:
+  prefix: "§8[§6SecureAuth§8]§r "
+
+  # Регистрация
+  register-usage: "§cИспользование: /register <пароль> <повтор_пароля>"
+  register-success: "§aРегистрация успешна! Войдите с помощью /login <пароль>"
+  register-already-registered: "§cВы уже зарегистрированы! Используйте /login <пароль>"
+  register-passwords-not-match: "§cПароли не совпадают!"
+  register-weak-password: "§cПароль слишком слабый! Требования:"
+  register-error: "§cОшибка регистрации!"
+
+  # Авторизация
+  login-usage: "§cИспользование: /login <пароль>"
+  login-success: "§aУспешная авторизация! Добро пожаловать!"
+  login-wrong-password: "§cНеверный пароль!"
+  login-not-registered: "§cВы не зарегистрированы! Используйте /register <пароль> <повтор>"
+  login-already-authenticated: "§cВы уже авторизованы!"
+  login-blocked: "§cСлишком много неудачных попыток! Попробуйте через {time} минут."
+  login-session-restored: "§aСессия восстановлена!"
+  login-ip-changed: "§eОбнаружена смена IP адреса. Требуется повторная авторизация."
+
+  # Общие
+  auth-required: "§cДля продолжения необходимо авторизоваться!"
+  command-blocked: "§cДля использования команд авторизуйтесь!"
+  chat-blocked: "§cДля использования чата авторизуйтесь!"
+
+  # Инструкции в лобби
+  auth-lobby-title: "§c=== ТРЕБУЕТСЯ АВТОРИЗАЦИЯ ==="
+  auth-lobby-instructions: |
+    §7Для продолжения игры введите:
+    §e/login <пароль> §7- для входа
+    §e/register <пароль> <повтор> §7- для регистрации
+  auth-lobby-footer: "§c=============================="
+
+# Дополнительные настройки
+misc:
+  # Автоматическое сохранение данных игроков
+  auto-save-interval-minutes: 5
+
+  # Логирование
+  log-successful-logins: true
+  log-failed-logins: true
+  log-registrations: true
+
+  # UUID объединение
+  enable-uuid-linking: true # Автоматическая привязка premium UUID к аккаунту
