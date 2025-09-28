@@ -304,4 +304,58 @@ public class AuthManager {
                     return false;
                 });
     }
+
+    /**
+     * Принудительное обновление кеша с текущими данными игрока
+     * Используется перед сохранением при выходе или разлогинивании
+     */
+    public void forceCacheUpdate(Player player) {
+        String username = player.getName().toLowerCase();
+        PlayerData data = playerDataCache.get(username);
+
+        if (data == null) {
+            // Если данных нет в кеше, создаем новые
+            data = new PlayerData(username);
+            playerDataCache.put(username, data);
+            plugin.getLogger().warning("Создан новый кеш для игрока " + username + " при принудительном обновлении");
+        }
+
+        // Сохраняем все текущие данные игрока в кеш
+        try {
+            data.saveFromPlayer(player);
+            plugin.getLogger().fine("Кеш игрока " + username + " принудительно обновлен");
+        } catch (Exception e) {
+            plugin.getLogger().log(Level.WARNING, "Ошибка принудительного обновления кеша для " + username, e);
+        }
+    }
+
+    /**
+     * Обновление позиции игрока в кеше
+     * Вызывается при движении для постоянной актуальности данных
+     */
+    public void updatePlayerPosition(Player player) {
+        String username = player.getName().toLowerCase();
+        PlayerData data = playerDataCache.get(username);
+
+        if (data != null) {
+            org.bukkit.Location loc = player.getLocation();
+
+            // Обновляем только если это не лобби авторизации
+            String lobbyWorld = plugin.getConfigManager().getLobbyWorld();
+            if (!loc.getWorld().getName().equals(lobbyWorld)) {
+                data.setWorldName(loc.getWorld().getName());
+                data.setX(loc.getX());
+                data.setY(loc.getY());
+                data.setZ(loc.getZ());
+                data.setYaw(loc.getYaw());
+                data.setPitch(loc.getPitch());
+
+                // Также обновляем игровой режим на всякий случай
+                data.setGameMode(player.getGameMode().name());
+
+                // Обновляем время последней активности
+                data.setUpdatedAt(System.currentTimeMillis());
+            }
+        }
+    }
 }

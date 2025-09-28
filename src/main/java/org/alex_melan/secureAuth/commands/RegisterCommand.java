@@ -110,10 +110,15 @@ public class RegisterCommand implements CommandExecutor {
         // Проверка сложности пароля (если включена)
         if (plugin.getConfigManager().isPasswordComplexityEnforced()) {
             if (!PasswordUtils.isPasswordValid(password)) {
-                player.sendMessage(plugin.getConfigManager().getMessage("register-weak-password",
-                        String.valueOf(plugin.getConfigManager().getConfig().getInt("security.min-password-length", 8)),
-                        String.valueOf(plugin.getConfigManager().getConfig().getInt("security.max-password-length", 32))
-                ));
+                int minLength = plugin.getConfigManager().getConfig().getInt("security.min-password-length", 8);
+                int maxLength = plugin.getConfigManager().getConfig().getInt("security.max-password-length", 32);
+
+                player.sendMessage("§cПароль слишком слабый! Требования:");
+                player.sendMessage("§7• От §e" + minLength + "§7 до §e" + maxLength + "§7 символов");
+                player.sendMessage("§7• Минимум одна заглавная буква");
+                player.sendMessage("§7• Минимум одна строчная буква");
+                player.sendMessage("§7• Минимум одна цифра");
+
                 showPasswordRequirements(player);
                 return false;
             }
@@ -163,9 +168,12 @@ public class RegisterCommand implements CommandExecutor {
     }
 
     private void showPasswordRequirements(Player player) {
+        int minLength = plugin.getConfigManager().getConfig().getInt("security.min-password-length", 8);
+        int maxLength = plugin.getConfigManager().getConfig().getInt("security.max-password-length", 32);
+
         if (plugin.getConfigManager().isPasswordComplexityEnforced()) {
             player.sendMessage("§7§lТребования к паролю:");
-            player.sendMessage("§7• От 8 до 32 символов");
+            player.sendMessage("§7• От §e" + minLength + "§7 до §e" + maxLength + "§7 символов");
             player.sendMessage("§7• Минимум одна заглавная буква (A-Z)");
             player.sendMessage("§7• Минимум одна строчная буква (a-z)");
             player.sendMessage("§7• Минимум одна цифра (0-9)");
@@ -173,9 +181,7 @@ public class RegisterCommand implements CommandExecutor {
             player.sendMessage("§7  @$!%*?&.,_-+=~`|[]{}():;\"'<>/\\^#");
             player.sendMessage("§7• Не должен содержать ваш никнейм");
         } else {
-            int minLength = plugin.getConfigManager().getConfig().getInt("security.min-password-length", 8);
-            int maxLength = plugin.getConfigManager().getConfig().getInt("security.max-password-length", 32);
-            player.sendMessage("§7Пароль должен содержать от " + minLength + " до " + maxLength + " символов");
+            player.sendMessage("§7Пароль должен содержать от §e" + minLength + "§7 до §e" + maxLength + "§7 символов");
             player.sendMessage("§7Разрешены: буквы, цифры и символы @$!%*?&.,_-+=~`|[]{}():;\"'<>/\\^#");
         }
     }

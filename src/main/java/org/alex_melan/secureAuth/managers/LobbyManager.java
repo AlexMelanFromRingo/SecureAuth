@@ -135,46 +135,25 @@ public class LobbyManager {
     }
 
     /**
-     * Убеждаемся что платформа существует
-     */
-    private void ensurePlatformExists() {
-        if (authWorld == null || customLobby) return;
-
-        int centerX = (int) plugin.getConfigManager().getLobbyX();
-        int centerY = (int) plugin.getConfigManager().getLobbyY();
-        int centerZ = (int) plugin.getConfigManager().getLobbyZ();
-        int platformOffset = plugin.getConfig().getInt("lobby.platform-offset", -1);
-        int platformY = centerY + platformOffset;
-
-        // Проверяем центральный блок
-        Block centerBlock = authWorld.getBlockAt(centerX, platformY, centerZ);
-        if (centerBlock.getType() != Material.EMERALD_BLOCK) {
-            plugin.getLogger().info("Платформа не найдена, создаем...");
-            createAuthPlatform();
-        }
-    }
-
-    /**
      * Создание платформы для авторизации
      */
     private void createAuthPlatform() {
         if (authWorld == null || customLobby) return;
 
-        // ИСПРАВЛЕНО: Выполняем в основном потоке, а не асинхронно
+        // ИСПРАВЛЕНО: Выполняем в основном потоке
         Bukkit.getScheduler().runTask(plugin, () -> {
             try {
-                // ИСПРАВЛЕНО: Убрана некорректная проверка isLoaded()
                 if (authWorld == null) {
                     plugin.getLogger().warning("Мир авторизации не инициализирован, отменяем создание платформы");
                     return;
                 }
 
-                int centerX = (int) plugin.getConfigManager().getLobbyX();
-                int centerY = (int) plugin.getConfigManager().getLobbyY();
-                int centerZ = (int) plugin.getConfigManager().getLobbyZ();
-                int platformOffset = plugin.getConfig().getInt("lobby.platform-offset", -1);
+                int centerX = (int) Math.floor(plugin.getConfigManager().getLobbyX());
+                int centerY = (int) Math.floor(plugin.getConfigManager().getLobbyY());
+                int centerZ = (int) Math.floor(plugin.getConfigManager().getLobbyZ());
 
-                int platformY = centerY + platformOffset;
+                // ИСПРАВЛЕНО: Платформа теперь НА уровне Y, а не ниже
+                int platformY = centerY - 1; // Платформа под ногами
 
                 plugin.getLogger().info("Создание платформы авторизации в " + authWorld.getName() +
                         " на координатах " + centerX + ", " + platformY + ", " + centerZ);
@@ -182,26 +161,26 @@ public class LobbyManager {
                 // Убеждаемся что чанк загружен
                 authWorld.loadChunk(centerX >> 4, centerZ >> 4);
 
-                // ИСПРАВЛЕНО: Создаем более надежную платформу 11x11
+                // ИСПРАВЛЕНО: Создаем надежную платформу 11x11
                 for (int x = centerX - 5; x <= centerX + 5; x++) {
                     for (int z = centerZ - 5; z <= centerZ + 5; z++) {
                         Block block = authWorld.getBlockAt(x, platformY, z);
 
-                        // Центр - изумрудный блок
-                        if (x == centerX && z == centerZ) {
+                        // Центр 3x3 - изумрудные блоки
+                        if (Math.abs(x - centerX) <= 1 && Math.abs(z - centerZ) <= 1) {
                             block.setType(Material.EMERALD_BLOCK);
                         }
-                        // Внутренний квадрат 5x5 - кварц
-                        else if (Math.abs(x - centerX) <= 2 && Math.abs(z - centerZ) <= 2) {
+                        // Средний квадрат 7x7 - кварц
+                        else if (Math.abs(x - centerX) <= 3 && Math.abs(z - centerZ) <= 3) {
                             block.setType(Material.QUARTZ_BLOCK);
                         }
                         // Края - стекло
                         else {
-                            block.setType(Material.GLASS);
+                            block.setType(Material.WHITE_STAINED_GLASS);
                         }
 
                         // Убираем блоки сверху для свободного пространства
-                        for (int y = platformY + 1; y <= platformY + 10; y++) {
+                        for (int y = centerY; y <= centerY + 5; y++) {
                             Block airBlock = authWorld.getBlockAt(x, y, z);
                             if (airBlock.getType() != Material.AIR) {
                                 airBlock.setType(Material.AIR);
@@ -210,31 +189,61 @@ public class LobbyManager {
                     }
                 }
 
-                // Создаем стены из барьеров только по самым краям (для безопасности)
+                // Декоративные светящиеся блоки по углам
+                int[][] corners = {{-4, -4}, {-4, 4}, {4, -4}, {4, 4}};
+                for (int[] corner : corners) {
+                    Block glowstone = authWorld.getBlockAt(
+                            centerX + corner[0],
+                            platformY,
+                            centerZ + corner[1]
+                    );
+                    glowstone.setType(Material.GLOWSTONE);
+                }
+
+                // Создаем стены из стеклянных панелей для эстетики (не барьеров)
                 for (int x = centerX - 6; x <= centerX + 6; x++) {
                     for (int z = centerZ - 6; z <= centerZ + 6; z++) {
-                        for (int y = platformY + 1; y <= platformY + 3; y++) {
-                            // Только по внешним краям
-                            if (Math.abs(x - centerX) == 6 || Math.abs(z - centerZ) == 6) {
+                        // Только по внешним краям
+                        if (Math.abs(x - centerX) == 6 || Math.abs(z - centerZ) == 6) {
+                            // Стеклянные панели вместо барьеров для видимости
+                            for (int y = centerY; y <= centerY + 3; y++) {
                                 Block block = authWorld.getBlockAt(x, y, z);
-                                block.setType(Material.BARRIER);
+                                if (y == centerY + 3) {
+                                    // Верх - светящееся стекло
+                                    block.setType(Material.GLOWSTONE);
+                                } else {
+                                    // Стены - обычное стекло
+                                    block.setType(Material.GLASS);
+                                }
                             }
                         }
                     }
                 }
 
-                // Информационная табличка
-                Block signBlock = authWorld.getBlockAt(centerX, platformY + 1, centerZ - 3);
-                signBlock.setType(Material.OAK_SIGN);
+                // Информационные таблички на всех 4 сторонах
+                int[][] signPositions = {
+                        {0, -3}, // Север
+                        {0, 3},  // Юг
+                        {-3, 0}, // Запад
+                        {3, 0}   // Восток
+                };
 
-                // Обновляем табличку в том же потоке
-                if (signBlock.getState() instanceof Sign) {
-                    Sign sign = (Sign) signBlock.getState();
-                    sign.setLine(0, "§c§l=== AUTH ===");
-                    sign.setLine(1, "§7/register пароль");
-                    sign.setLine(2, "§7/login пароль");
-                    sign.setLine(3, "§c§l============");
-                    sign.update();
+                for (int[] pos : signPositions) {
+                    Block signBlock = authWorld.getBlockAt(
+                            centerX + pos[0],
+                            centerY + 1,
+                            centerZ + pos[1]
+                    );
+                    signBlock.setType(Material.OAK_SIGN);
+
+                    if (signBlock.getState() instanceof Sign) {
+                        Sign sign = (Sign) signBlock.getState();
+                        sign.setLine(0, "§c§l=== AUTH ===");
+                        sign.setLine(1, "§e/register");
+                        sign.setLine(2, "§e/login");
+                        sign.setLine(3, "§c§l===========");
+                        sign.update();
+                    }
                 }
 
                 plugin.getLogger().info("Платформа авторизации создана успешно в мире " + authWorld.getName());
@@ -244,6 +253,27 @@ public class LobbyManager {
                 e.printStackTrace();
             }
         });
+    }
+
+    /**
+     * Убеждаемся что платформа существует
+     */
+    private void ensurePlatformExists() {
+        if (authWorld == null || customLobby) return;
+
+        int centerX = (int) Math.floor(plugin.getConfigManager().getLobbyX());
+        int centerY = (int) Math.floor(plugin.getConfigManager().getLobbyY());
+        int centerZ = (int) Math.floor(plugin.getConfigManager().getLobbyZ());
+
+        // ИСПРАВЛЕНО: Проверяем блок ПОД ногами
+        int platformY = centerY - 1;
+
+        // Проверяем центральный блок платформы
+        Block centerBlock = authWorld.getBlockAt(centerX, platformY, centerZ);
+        if (centerBlock.getType() != Material.EMERALD_BLOCK) {
+            plugin.getLogger().info("Платформа не найдена, создаем...");
+            createAuthPlatform();
+        }
     }
 
     public void sendToAuthLobby(Player player) {
@@ -412,7 +442,7 @@ public class LobbyManager {
             if (!player.isOnline()) return;
 
             player.sendMessage("");
-            player.sendMessage(plugin.getConfigManager().getMessage("auth-lobby-title"));
+            player.sendMessage("§c§l=== ТРЕБУЕТСЯ АВТОРИЗАЦИЯ ===");
 
             // Асинхронно проверяем регистрацию
             plugin.getDatabaseManager().isPlayerRegistered(player.getName())
@@ -421,28 +451,28 @@ public class LobbyManager {
                             if (!player.isOnline()) return;
 
                             if (registered) {
-                                String[] messages = plugin.getConfigManager().getMessageList("auth-lobby-welcome-back");
-                                for (String message : messages) {
-                                    player.sendMessage(message.replace("{player}", player.getName()));
-                                }
+                                // Приветствие для зарегистрированных
+                                player.sendMessage("§7Добро пожаловать обратно, §e" + player.getName() + "§7!");
+                                player.sendMessage("§7Введите: §a/login <пароль>");
                             } else {
-                                String[] messages = plugin.getConfigManager().getMessageList("auth-lobby-welcome-new");
-                                for (String message : messages) {
-                                    player.sendMessage(message.replace("{player}", player.getName()));
-                                }
+                                // Приветствие для новых игроков
+                                player.sendMessage("§7Добро пожаловать на сервер, §e" + player.getName() + "§7!");
+                                player.sendMessage("§7Создайте аккаунт: §a/register <пароль> <повтор>");
 
-                                // Показываем требования к паролю
+                                // Показываем требования к паролю с правильным форматированием
                                 if (plugin.getConfigManager().isPasswordComplexityEnforced()) {
-                                    String[] requirements = plugin.getConfigManager().getMessageList("auth-lobby-password-requirements");
-                                    for (String req : requirements) {
-                                        player.sendMessage(req
-                                                .replace("{min}", "8")
-                                                .replace("{max}", "32"));
-                                    }
+                                    int minLength = plugin.getConfigManager().getConfig().getInt("security.min-password-length", 8);
+                                    int maxLength = plugin.getConfigManager().getConfig().getInt("security.max-password-length", 32);
+
+                                    player.sendMessage("");
+                                    player.sendMessage("§7§lТребования к паролю:");
+                                    player.sendMessage("§7• От §e" + minLength + "§7 до §e" + maxLength + "§7 символов");
+                                    player.sendMessage("§7• Заглавные и строчные буквы");
+                                    player.sendMessage("§7• Минимум одна цифра");
                                 }
                             }
 
-                            player.sendMessage(plugin.getConfigManager().getMessage("auth-lobby-footer"));
+                            player.sendMessage("§c§l================================");
                             player.sendMessage("");
                         });
                     })

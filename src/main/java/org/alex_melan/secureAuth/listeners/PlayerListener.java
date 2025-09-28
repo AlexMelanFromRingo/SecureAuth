@@ -152,21 +152,31 @@ public class PlayerListener implements Listener {
                 });
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
+    @EventHandler(priority = EventPriority.LOWEST)  // ИСПРАВЛЕНО: Изменен приоритет на LOWEST чтобы сработать раньше всех
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
         String username = player.getName();
 
-        plugin.getLogger().info("Игрок " + username + " отключился");
+        plugin.getLogger().info("Игрок " + username + " отключается, сохраняем данные...");
 
-        // Сохраняем данные игрока, если он авторизован
+        // ИСПРАВЛЕНО: Принудительно сохраняем актуальные данные игрока
         if (plugin.getSessionManager().isAuthenticated(username)) {
+            // Обновляем кеш с текущими данными прямо перед сохранением
+            plugin.getAuthManager().forceCacheUpdate(player);
+
+            // Сохраняем обновленные данные
             plugin.getAuthManager().savePlayerData(player);
+
+            plugin.getLogger().info("Данные игрока " + username + " сохранены при выходе");
         }
 
         // Удаляем из кеша через некоторое время (на случай быстрого переподключения)
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-            plugin.getAuthManager().removeCachedData(username);
+            // Проверяем что игрок не переподключился
+            if (plugin.getServer().getPlayerExact(username) == null) {
+                plugin.getAuthManager().removeCachedData(username);
+                plugin.getLogger().info("Кеш игрока " + username + " очищен");
+            }
         }, 20L * 30); // 30 секунд
     }
 
@@ -251,6 +261,11 @@ public class PlayerListener implements Listener {
             // Разрешаем только поворот головы, но не движение
             if (hasPlayerMoved(event)) {
                 event.setTo(event.getFrom());
+            }
+        } else {
+            // ИСПРАВЛЕНО: Обновляем позицию в кеше для авторизованного игрока
+            if (hasPlayerMoved(event)) {
+                plugin.getAuthManager().updatePlayerPosition(player);
             }
         }
     }

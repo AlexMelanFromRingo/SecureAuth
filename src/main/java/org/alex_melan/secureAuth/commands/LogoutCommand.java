@@ -37,13 +37,16 @@ public class LogoutCommand implements CommandExecutor {
             return true;
         }
 
+        // ИСПРАВЛЕНО: Принудительно обновляем кеш перед сохранением
+        plugin.getAuthManager().forceCacheUpdate(player);
+
         // Сохраняем данные игрока перед выходом
         plugin.getAuthManager().savePlayerData(player);
 
         // Деактивируем сессию
         plugin.getSessionManager().invalidateSession(username);
 
-        // Отправляем в лобби авторизации
+        // ИСПРАВЛЕНО: Обязательно отправляем в лобби авторизации
         plugin.getLobbyManager().sendToAuthLobby(player);
 
         // Отправляем сообщение

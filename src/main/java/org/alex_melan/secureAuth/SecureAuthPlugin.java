@@ -1,5 +1,6 @@
 package org.alex_melan.secureAuth;
 
+import org.alex_melan.secureAuth.commands.LogoutCommand;
 import org.alex_melan.secureAuth.database.DatabaseManager;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -117,6 +118,9 @@ public class SecureAuthPlugin extends JavaPlugin {
 
         // Админ команды
         getCommand("secureauth").setExecutor(new AuthAdminCommand(this));
+
+        // Команда выхода
+        getCommand("logout").setExecutor(new LogoutCommand(this));
 
         getLogger().info("Команды зарегистрированы успешно");
     }
