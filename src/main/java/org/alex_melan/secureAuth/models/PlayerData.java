@@ -135,8 +135,13 @@ public class PlayerData {
 
             this.updatedAt = System.currentTimeMillis();
 
-            LOGGER.info("Данные игрока " + username + " сохранены: мир=" + worldName +
-                    ", координаты=(" + Math.round(x) + "," + Math.round(y) + "," + Math.round(z) + ")");
+            // УЛУЧШЕНО: Детальное логирование с gameMode
+            LOGGER.info("Данные игрока " + username + " сохранены: " +
+                    "мир=" + worldName +
+                    ", координаты=(" + Math.round(x) + "," + Math.round(y) + "," + Math.round(z) + ")" +
+                    ", режим=" + gameMode +  // <-- ДОБАВЛЕНО
+                    ", здоровье=" + Math.round(health) +
+                    ", голод=" + food);
 
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Ошибка сохранения данных игрока " + username, e);

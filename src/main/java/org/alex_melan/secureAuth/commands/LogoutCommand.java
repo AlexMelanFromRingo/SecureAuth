@@ -16,7 +16,6 @@ public class LogoutCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        // Проверка что команду выполняет игрок
         if (!(sender instanceof Player)) {
             sender.sendMessage(plugin.getConfigManager().getMessage("player-only"));
             return true;
@@ -25,31 +24,29 @@ public class LogoutCommand implements CommandExecutor {
         Player player = (Player) sender;
         String username = player.getName();
 
-        // Проверка полной инициализации плагина
         if (!plugin.isFullyInitialized()) {
             player.sendMessage("§cПлагин авторизации еще не полностью загружен.");
             return true;
         }
 
-        // Проверка авторизации
         if (!plugin.getSessionManager().isAuthenticated(username)) {
             player.sendMessage(plugin.getConfigManager().getMessage("logout-not-authenticated"));
             return true;
         }
 
-        // ИСПРАВЛЕНО: Принудительно обновляем кеш перед сохранением
+        // ИСПРАВЛЕНО: Принудительно обновляем кеш с текущими данными
         plugin.getAuthManager().forceCacheUpdate(player);
 
-        // Сохраняем данные игрока перед выходом
+        // Сохраняем данные игрока ПЕРЕД деактивацией сессии
         plugin.getAuthManager().savePlayerData(player);
 
-        // Деактивируем сессию
+        // ИСПРАВЛЕНО: Деактивируем сессию ПЕРЕД отправкой в лобби
+        // Чтобы игрок не считался авторизованным в лобби
         plugin.getSessionManager().invalidateSession(username);
 
-        // ИСПРАВЛЕНО: Обязательно отправляем в лобби авторизации
+        // Теперь отправляем в лобби (игрок уже НЕ авторизован)
         plugin.getLobbyManager().sendToAuthLobby(player);
 
-        // Отправляем сообщение
         player.sendMessage(plugin.getConfigManager().getMessage("logout-success"));
 
         // Логируем действие

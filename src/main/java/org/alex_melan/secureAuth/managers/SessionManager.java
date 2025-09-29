@@ -250,4 +250,34 @@ public class SessionManager {
 
         return "Сессия: " + sessionHash.substring(0, 8) + "...";
     }
+
+    /**
+     * ДОБАВЛЕНО: Синхронная деактивация всех сессий для корректного завершения плагина
+     * Используется при onDisable чтобы избежать проблем с закрытым DataSource
+     */
+    public void invalidateAllSessionsSync() {
+        plugin.getLogger().info("Синхронная деактивация всех активных сессий...");
+
+        int count = activeSessions.size();
+        if (count == 0) {
+            plugin.getLogger().info("Активных сессий нет");
+            return;
+        }
+
+        // Деактивируем все сессии синхронно
+        for (Map.Entry<String, String> entry : activeSessions.entrySet()) {
+            String username = entry.getKey();
+            String sessionHash = entry.getValue();
+
+            try {
+                // Вызываем синхронный метод деактивации
+                databaseManager.invalidateSessionSync(sessionHash);
+            } catch (Exception e) {
+                plugin.getLogger().warning("Ошибка деактивации сессии для " + username + ": " + e.getMessage());
+            }
+        }
+
+        activeSessions.clear();
+        plugin.getLogger().info("Деактивировано " + count + " сессий");
+    }
 }

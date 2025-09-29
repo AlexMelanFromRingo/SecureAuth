@@ -161,15 +161,28 @@ public class SecureAuthPlugin extends JavaPlugin {
         if (authManager != null) {
             getLogger().info("Сохранение данных игроков...");
             authManager.saveAllPlayerData();
+
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
 
         if (sessionManager != null) {
-            getLogger().info("Очистка активных сессий...");
-            sessionManager.invalidateAllSessions();
+            getLogger().info("Деактивация активных сессий...");
+            sessionManager.invalidateAllSessionsSync();
         }
 
         if (databaseManager != null) {
             getLogger().info("Закрытие соединения с базой данных...");
+
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+
             databaseManager.close();
         }
 

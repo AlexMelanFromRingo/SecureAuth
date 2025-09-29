@@ -322,8 +322,15 @@ public class AuthManager {
 
         // Сохраняем все текущие данные игрока в кеш
         try {
+            // ДОБАВЛЕНО: Логируем ДО сохранения
+            plugin.getLogger().info("Принудительное обновление кеша для " + username +
+                    " - текущий режим: " + player.getGameMode().name());
+
             data.saveFromPlayer(player);
-            plugin.getLogger().fine("Кеш игрока " + username + " принудительно обновлен");
+
+            // ДОБАВЛЕНО: Логируем ПОСЛЕ сохранения
+            plugin.getLogger().info("Кеш игрока " + username + " обновлен - сохранен режим: " + data.getGameMode());
+
         } catch (Exception e) {
             plugin.getLogger().log(Level.WARNING, "Ошибка принудительного обновления кеша для " + username, e);
         }
@@ -350,10 +357,6 @@ public class AuthManager {
                 data.setYaw(loc.getYaw());
                 data.setPitch(loc.getPitch());
 
-                // Также обновляем игровой режим на всякий случай
-                data.setGameMode(player.getGameMode().name());
-
-                // Обновляем время последней активности
                 data.setUpdatedAt(System.currentTimeMillis());
             }
         }

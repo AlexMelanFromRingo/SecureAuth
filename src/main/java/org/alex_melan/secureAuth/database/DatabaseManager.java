@@ -446,6 +446,26 @@ public class DatabaseManager {
         });
     }
 
+    public void invalidateSessionSync(String sessionHash) {
+        if (dataSource == null || dataSource.isClosed()) {
+            plugin.getLogger().warning("DataSource уже закрыт, пропускаем деактивацию сессии");
+            return;
+        }
+
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement("UPDATE sessions SET is_active = 0 WHERE session_hash = ?")) {
+
+            stmt.setString(1, sessionHash);
+            stmt.executeUpdate();
+
+        } catch (SQLException e) {
+            // Логируем только если это не ошибка закрытого DataSource
+            if (!e.getMessage().contains("has been closed")) {
+                plugin.getLogger().log(Level.WARNING, "Ошибка синхронной деактивации сессии", e);
+            }
+        }
+    }
+
     public CompletableFuture<Void> invalidateUserSessions(String username) {
         return CompletableFuture.runAsync(() -> {
             try (Connection conn = dataSource.getConnection();
