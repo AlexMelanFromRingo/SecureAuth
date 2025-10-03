@@ -220,29 +220,54 @@ public class LobbyManager {
                     }
                 }
 
-                // Информационные таблички на всех 4 сторонах
+                // ИСПРАВЛЕНО: Информационные таблички на всех 4 сторонах с правильной ориентацией
+                // Координаты ОТНОСИТЕЛЬНО центра платформы
                 int[][] signPositions = {
-                        {0, -3}, // Север
-                        {0, 3},  // Юг
-                        {-3, 0}, // Запад
-                        {3, 0}   // Восток
+                        {0, -4}, // Север (Z-) - сзади игрока
+                        {0, 4},  // Юг (Z+) - ПЕРЕД игроком
+                        {-4, 0}, // Запад (X-) - слева от игрока
+                        {4, 0}   // Восток (X+) - справа от игрока
                 };
 
-                for (int[] pos : signPositions) {
-                    Block signBlock = authWorld.getBlockAt(
-                            centerX + pos[0],
-                            centerY + 1,
-                            centerZ + pos[1]
-                    );
-                    signBlock.setType(Material.OAK_SIGN);
+                // Для WallSign: facing указывает направление от которого табличка "отходит"
+                // Табличка смотрит в ПРОТИВОПОЛОЖНУЮ сторону от facing
+                org.bukkit.block.BlockFace[] signFacings = {
+                        org.bukkit.block.BlockFace.SOUTH,  // Север: facing NORTH = смотрит на ЮГ (от игрока)
+                        org.bukkit.block.BlockFace.NORTH,  // Юг: facing SOUTH = смотрит на СЕВЕР (К ИГРОКУ) ✓
+                        org.bukkit.block.BlockFace.EAST,   // Запад: facing WEST = смотрит на ВОСТОК (к центру)
+                        org.bukkit.block.BlockFace.WEST    // Восток: facing EAST = смотрит на ЗАПАД (к центру)
+                };
 
+                for (int i = 0; i < signPositions.length; i++) {
+                    int[] pos = signPositions[i];
+                    int signX = centerX + pos[0];
+                    int signY = centerY + 1;
+                    int signZ = centerZ + pos[1];
+
+                    Block signBlock = authWorld.getBlockAt(signX, signY, signZ);
+
+                    // ИСПРАВЛЕНО: Сначала создаем BlockData с нужным направлением
+                    org.bukkit.block.data.type.WallSign wallSignData =
+                            (org.bukkit.block.data.type.WallSign) Material.OAK_WALL_SIGN.createBlockData();
+                    wallSignData.setFacing(signFacings[i]);
+
+                    // Устанавливаем блок с уже готовыми данными
+                    signBlock.setBlockData(wallSignData);
+
+                    // Логируем для отладки
+                    plugin.getLogger().info(String.format(
+                            "Табличка #%d: координаты=(%d, %d, %d), facing=%s, должна смотреть в противоположную сторону",
+                            i, signX, signY, signZ, signFacings[i]
+                    ));
+
+                    // Устанавливаем текст таблички
                     if (signBlock.getState() instanceof Sign) {
                         Sign sign = (Sign) signBlock.getState();
                         sign.setLine(0, "§c§l=== AUTH ===");
                         sign.setLine(1, "§e/register");
                         sign.setLine(2, "§e/login");
                         sign.setLine(3, "§c§l===========");
-                        sign.update();
+                        sign.update(true); // force update
                     }
                 }
 
@@ -386,7 +411,7 @@ public class LobbyManager {
     }
 
     private void setupPlayerForCustomLobby(Player player) {
-        // Если лобби кастомный, просто снимаем ограничения лобби
+        // ИСПРАВЛЕНО: Если лобби кастомный, просто снимаем ограничения лобби
         // НЕ меняем режим игры - он был восстановлен из данных игрока
         player.setAllowFlight(false);
         player.setFlying(false);

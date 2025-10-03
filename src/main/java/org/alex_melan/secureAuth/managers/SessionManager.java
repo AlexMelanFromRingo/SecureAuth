@@ -4,9 +4,13 @@ import org.alex_melan.secureAuth.SecureAuthPlugin;
 import org.alex_melan.secureAuth.database.DatabaseManager;
 import org.bukkit.Bukkit;
 
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 public class SessionManager {
 
@@ -88,20 +92,72 @@ public class SessionManager {
     }
 
     public void cleanExpiredSessions() {
-        databaseManager.cleanExpiredSessions().thenRun(() -> {
-            // Также очищаем локальный кеш от потенциально недействительных сессий
-            activeSessions.entrySet().removeIf(entry -> {
-                String username = entry.getKey();
-                String sessionHash = entry.getValue();
+        plugin.getLogger().info("Запуск очистки просроченных сессий...");
 
-                // Проверяем каждую сессию в кеше
-                try {
-                    return !databaseManager.validateSession(sessionHash, username, "validate").get();
-                } catch (Exception e) {
-                    plugin.getLogger().warning("Ошибка проверки сессии при очистке для " + username);
-                    return true; // Удаляем проблемную сессию
+        // Получаем список онлайн игроков для защиты их сессий
+        Set<String> onlinePlayers = new HashSet<>();
+        for (org.bukkit.entity.Player player : Bukkit.getOnlinePlayers()) {
+            onlinePlayers.add(player.getName().toLowerCase());
+        }
+
+        // Очищаем только просроченные сессии в БД
+        databaseManager.cleanExpiredSessions().thenRun(() -> {
+            plugin.getLogger().info("Очистка просроченных сессий в БД завершена");
+
+            // ИСПРАВЛЕНО: Очищаем из кеша только сессии ОФЛАЙН игроков, которые не в БД
+            int removedFromCache = 0;
+            Iterator<Map.Entry<String, String>> iterator = activeSessions.entrySet().iterator();
+
+            while (iterator.hasNext()) {
+                Map.Entry<String, String> entry = iterator.next();
+                String username = entry.getKey();
+
+                // КРИТИЧНО: НЕ трогаем сессии онлайн игроков!
+                if (onlinePlayers.contains(username)) {
+                    plugin.getLogger().fine("Пропускаем активную сессию онлайн игрока: " + username);
+                    continue;
                 }
-            });
+
+                // Проверяем только офлайн игроков
+                org.bukkit.entity.Player player = Bukkit.getPlayerExact(username);
+                if (player == null || !player.isOnline()) {
+                    // Игрок офлайн - можем проверить его сессию в БД
+                    String sessionHash = entry.getValue();
+
+                    // Получаем IP из базы для проверки (асинхронно)
+                    CompletableFuture<Boolean> validationFuture = plugin.getDatabaseManager()
+                            .getPlayerData(username)
+                            .thenCompose(data -> {
+                                if (data != null && data.getLastIp() != null) {
+                                    return plugin.getDatabaseManager()
+                                            .validateSession(sessionHash, username, data.getLastIp());
+                                }
+                                return CompletableFuture.completedFuture(false);
+                            });
+
+                    try {
+                        // Ждем результат (это уже в async задаче)
+                        boolean isValid = validationFuture.get(5, TimeUnit.SECONDS);
+
+                        if (!isValid) {
+                            iterator.remove();
+                            removedFromCache++;
+                            plugin.getLogger().fine("Удалена недействительная сессия из кеша: " + username);
+                        }
+                    } catch (Exception e) {
+                        // В случае ошибки НЕ удаляем сессию - безопаснее
+                        plugin.getLogger().warning("Ошибка проверки сессии при очистке для офлайн игрока " +
+                                username + ": " + e.getMessage());
+                    }
+                }
+            }
+
+            if (removedFromCache > 0) {
+                plugin.getLogger().info("Удалено " + removedFromCache + " недействительных сессий из кеша");
+            }
+        }).exceptionally(ex -> {
+            plugin.getLogger().severe("Ошибка при очистке просроченных сессий: " + ex.getMessage());
+            return null;
         });
     }
 

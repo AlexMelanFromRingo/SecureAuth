@@ -501,13 +501,18 @@ public class DatabaseManager {
     public CompletableFuture<Void> cleanExpiredSessions() {
         return CompletableFuture.runAsync(() -> {
             try (Connection conn = dataSource.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement("UPDATE sessions SET is_active = 0 WHERE expires_at < ? AND is_active = 1")) {
+                 PreparedStatement stmt = conn.prepareStatement(
+                         "UPDATE sessions SET is_active = 0 WHERE expires_at < ? AND is_active = 1")) {
 
-                stmt.setLong(1, System.currentTimeMillis());
+                long now = System.currentTimeMillis();
+                stmt.setLong(1, now);
                 int deleted = stmt.executeUpdate();
 
                 if (deleted > 0) {
-                    plugin.getLogger().info("Деактивировано " + deleted + " просроченных сессий");
+                    plugin.getLogger().info("Деактивировано " + deleted + " просроченных сессий (текущее время: " +
+                            new java.util.Date(now) + ")");
+                } else {
+                    plugin.getLogger().fine("Просроченных сессий не найдено");
                 }
 
             } catch (SQLException e) {
