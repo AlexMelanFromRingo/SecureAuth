@@ -386,8 +386,8 @@ public class LobbyManager {
     }
 
     private void setupPlayerForCustomLobby(Player player) {
-        // Если лобби кастомный, даем игроку возможность нормально играть
-        player.setGameMode(GameMode.SURVIVAL); // Или из конфига
+        // Если лобби кастомный, просто снимаем ограничения лобби
+        // НЕ меняем режим игры - он был восстановлен из данных игрока
         player.setAllowFlight(false);
         player.setFlying(false);
     }

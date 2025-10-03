@@ -98,9 +98,22 @@ public class PlayerListener implements Listener {
                         }
 
                         if (data != null) {
+                            // ДОБАВЛЕНО: Детальное логирование ДО применения данных
+                            plugin.getLogger().info("Восстановление сессии для " + username +
+                                    ": сохраненный режим=" + data.getGameMode() +
+                                    ", мир=" + data.getWorldName() +
+                                    ", позиция=(" + Math.round(data.getX()) + "," + Math.round(data.getY()) + "," + Math.round(data.getZ()) + ")");
+
+                            // Возвращаем игрока из лобби авторизации
                             plugin.getLobbyManager().returnFromAuthLobby(player);
+
+                            // ДОБАВЛЕНО: Логирование ПОСЛЕ применения данных
+                            plugin.getLogger().info("Сессия восстановлена для " + username +
+                                    ": текущий режим=" + player.getGameMode().name() +
+                                    ", текущий мир=" + player.getWorld().getName());
+
                             player.sendMessage(plugin.getConfigManager().getMessage("login-session-restored"));
-                            plugin.getLogger().info("Сессия игрока " + username + " восстановлена");
+                            plugin.getLogger().info("Сессия игрока " + username + " восстановлена успешно");
                         } else {
                             plugin.getLogger().warning("Не удалось загрузить данные игрока " + username + " при восстановлении сессии");
                             plugin.getLobbyManager().sendToAuthLobby(player);
