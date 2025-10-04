@@ -162,7 +162,7 @@ public class ConfigManager {
 
     // Получение сообщений с поддержкой плейсхолдеров
     public String getMessage(String key) {
-        return getMessage(key, null);
+        return getMessage(key, (String) null);
     }
 
     public String getMessage(String key, String... placeholders) {
