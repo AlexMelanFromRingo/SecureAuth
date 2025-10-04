@@ -36,6 +36,9 @@ dependencies {
 
     // SLF4J для логирования
     compileOnly 'org.slf4j:slf4j-api:2.0.7'
+
+    // НОВОЕ: Gson для сериализации расширенных данных
+    implementation 'com.google.code.gson:gson:2.10.1'
 }
 
 tasks {
@@ -77,9 +80,9 @@ shadowJar {
     // Relocate зависимостей во избежание конфликтов
     relocate 'com.zaxxer.hikari', 'org.alex_melan.secureAuth.libs.hikari'
     relocate 'org.mindrot.jbcrypt', 'org.alex_melan.secureAuth.libs.bcrypt'
+    relocate 'com.google.gson', 'org.alex_melan.secureAuth.libs.gson'  // НОВОЕ
 
     // НЕ relocate SQLite драйвер - это критично для JDBC
-    // relocate 'org.xerial', 'org.alex_melan.secureAuth.libs.xerial'
 
     // Исключаем ненужные файлы
     exclude 'META-INF/NOTICE*'
@@ -104,6 +107,7 @@ shadowJar {
     minimize {
         exclude(dependency('org.xerial:.*'))
         exclude(dependency('com.zaxxer:.*'))
+        exclude(dependency('com.google.code.gson:.*'))  // НОВОЕ
     }
 }
 

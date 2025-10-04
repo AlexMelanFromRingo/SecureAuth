@@ -1,5 +1,6 @@
 package org.alex_melan.secureAuth.models;
 
+import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -8,18 +9,21 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.io.BukkitObjectInputStream;
 import org.bukkit.util.io.BukkitObjectOutputStream;
 import org.yaml.snakeyaml.external.biz.base64Coder.Base64Coder;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.UUID;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class PlayerData {
 
     private static final Logger LOGGER = Logger.getLogger(PlayerData.class.getName());
+    private static final Gson GSON = new Gson();
 
     private String username;
     private String passwordHash;
@@ -45,13 +49,19 @@ public class PlayerData {
     private float saturation;
     private String gameMode;
 
+    // НОВОЕ: Расширенные данные
+    private String advancementsData;
+    private String statisticsData;
+    private String recipesData;
+    private String potionEffectsData;
+
     // Системные поля
     private long createdAt;
     private long updatedAt;
 
     public PlayerData(String username) {
         this.username = username.toLowerCase();
-        this.gameMode = "SURVIVAL"; // Значение по умолчанию
+        this.gameMode = "SURVIVAL";
         this.createdAt = System.currentTimeMillis();
         this.updatedAt = System.currentTimeMillis();
     }
@@ -86,7 +96,7 @@ public class PlayerData {
 
         data.worldName = rs.getString("world_name");
         if (data.worldName == null) {
-            data.worldName = "world"; // Значение по умолчанию
+            data.worldName = "world";
         }
 
         data.x = rs.getDouble("x");
@@ -105,8 +115,25 @@ public class PlayerData {
 
         data.gameMode = rs.getString("game_mode");
         if (data.gameMode == null) {
-            data.gameMode = "SURVIVAL"; // Значение по умолчанию
+            data.gameMode = "SURVIVAL";
         }
+
+        // НОВОЕ: Загрузка расширенных данных
+        try {
+            data.advancementsData = rs.getString("advancements_data");
+        } catch (SQLException ignored) {}
+
+        try {
+            data.statisticsData = rs.getString("statistics_data");
+        } catch (SQLException ignored) {}
+
+        try {
+            data.recipesData = rs.getString("recipes_data");
+        } catch (SQLException ignored) {}
+
+        try {
+            data.potionEffectsData = rs.getString("potion_effects_data");
+        } catch (SQLException ignored) {}
 
         data.createdAt = rs.getLong("created_at");
         data.updatedAt = rs.getLong("updated_at");
@@ -133,15 +160,22 @@ public class PlayerData {
             this.saturation = player.getSaturation();
             this.gameMode = player.getGameMode().name();
 
+            // НОВОЕ: Сохранение расширенных данных
+            this.advancementsData = serializeAdvancements(player);
+            this.statisticsData = serializeStatistics(player);
+            this.recipesData = serializeRecipes(player);
+            this.potionEffectsData = serializePotionEffects(player);
+
             this.updatedAt = System.currentTimeMillis();
 
-            // УЛУЧШЕНО: Детальное логирование с gameMode
-            LOGGER.info("Данные игрока " + username + " сохранены: " +
+            LOGGER.info("Данные игрока " + username + " сохранены полностью: " +
                     "мир=" + worldName +
                     ", координаты=(" + Math.round(x) + "," + Math.round(y) + "," + Math.round(z) + ")" +
-                    ", режим=" + gameMode +  // <-- ДОБАВЛЕНО
+                    ", режим=" + gameMode +
                     ", здоровье=" + Math.round(health) +
-                    ", голод=" + food);
+                    ", голод=" + food +
+                    ", достижений=" + (advancementsData != null ? "да" : "нет") +
+                    ", рецептов=" + (recipesData != null ? "да" : "нет"));
 
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Ошибка сохранения данных игрока " + username, e);
@@ -158,7 +192,6 @@ public class PlayerData {
                 world = defaultWorld;
             }
 
-            // Проверка безопасности координат
             double safeY = Math.max(-64, Math.min(320, y));
             if (safeY != y) {
                 LOGGER.warning("Некорректная Y координата " + y + " для игрока " + username + ", используется " + safeY);
@@ -166,7 +199,6 @@ public class PlayerData {
 
             Location location = new Location(world, x, safeY, z, yaw, pitch);
 
-            // Проверяем что локация безопасна
             if (isLocationSafe(location)) {
                 player.teleport(location);
             } else {
@@ -202,7 +234,7 @@ public class PlayerData {
                 }
             }
 
-            // Восстановление статов с проверками
+            // Восстановление статов
             player.setTotalExperience(Math.max(0, experience));
             player.setLevel(Math.max(0, level));
 
@@ -211,6 +243,23 @@ public class PlayerData {
 
             player.setFoodLevel(Math.max(0, Math.min(20, food)));
             player.setSaturation(Math.max(0, Math.min(20, saturation)));
+
+            // НОВОЕ: Восстановление расширенных данных
+            if (advancementsData != null && !advancementsData.isEmpty()) {
+                deserializeAdvancements(player, advancementsData);
+            }
+
+            if (statisticsData != null && !statisticsData.isEmpty()) {
+                deserializeStatistics(player, statisticsData);
+            }
+
+            if (recipesData != null && !recipesData.isEmpty()) {
+                deserializeRecipes(player, recipesData);
+            }
+
+            if (potionEffectsData != null && !potionEffectsData.isEmpty()) {
+                deserializePotionEffects(player, potionEffectsData);
+            }
 
             LOGGER.info("Данные игрока " + username + " восстановлены успешно");
 
@@ -232,13 +281,9 @@ public class PlayerData {
             return false;
         }
 
-        // Проверяем что координаты в разумных пределах
         if (location.getY() < -64 || location.getY() > 320) {
             return false;
         }
-
-        // Можно добавить дополнительные проверки безопасности
-        // например, проверка на лаву, пустоту и т.д.
 
         return true;
     }
@@ -291,6 +336,212 @@ public class PlayerData {
         }
     }
 
+    // === НОВОЕ: Методы сериализации достижений ===
+
+    private String serializeAdvancements(Player player) {
+        try {
+            Map<String, Set<String>> advancementData = new HashMap<>();
+
+            Iterator<org.bukkit.advancement.Advancement> it = Bukkit.getServer().advancementIterator();
+            while (it.hasNext()) {
+                org.bukkit.advancement.Advancement adv = it.next();
+                org.bukkit.advancement.AdvancementProgress progress = player.getAdvancementProgress(adv);
+
+                if (progress != null && progress.getAwardedCriteria().size() > 0) {
+                    advancementData.put(
+                            adv.getKey().toString(),
+                            new HashSet<>(progress.getAwardedCriteria())
+                    );
+                }
+            }
+
+            return GSON.toJson(advancementData);
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Ошибка сериализации достижений для " + username, e);
+            return null;
+        }
+    }
+
+    private void deserializeAdvancements(Player player, String data) {
+        try {
+            Map<String, Set<String>> advancementData = GSON.fromJson(
+                    data,
+                    new TypeToken<Map<String, Set<String>>>(){}.getType()
+            );
+
+            if (advancementData == null) return;
+
+            for (Map.Entry<String, Set<String>> entry : advancementData.entrySet()) {
+                org.bukkit.NamespacedKey key = org.bukkit.NamespacedKey.fromString(entry.getKey());
+                if (key == null) continue;
+
+                org.bukkit.advancement.Advancement adv = Bukkit.getServer().getAdvancement(key);
+                if (adv == null) continue;
+
+                org.bukkit.advancement.AdvancementProgress progress = player.getAdvancementProgress(adv);
+                for (String criteria : entry.getValue()) {
+                    if (!progress.getAwardedCriteria().contains(criteria)) {
+                        progress.awardCriteria(criteria);
+                    }
+                }
+            }
+
+            LOGGER.fine("Достижения восстановлены для " + username);
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Ошибка восстановления достижений для " + username, e);
+        }
+    }
+
+    // === НОВОЕ: Методы сериализации статистики ===
+
+    private String serializeStatistics(Player player) {
+        try {
+            Map<String, Integer> stats = new HashMap<>();
+
+            for (org.bukkit.Statistic stat : org.bukkit.Statistic.values()) {
+                try {
+                    if (stat.getType() == org.bukkit.Statistic.Type.UNTYPED) {
+                        int value = player.getStatistic(stat);
+                        if (value > 0) {
+                            stats.put(stat.name(), value);
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            return GSON.toJson(stats);
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Ошибка сериализации статистики для " + username, e);
+            return null;
+        }
+    }
+
+    private void deserializeStatistics(Player player, String data) {
+        try {
+            Map<String, Integer> stats = GSON.fromJson(
+                    data,
+                    new TypeToken<Map<String, Integer>>(){}.getType()
+            );
+
+            if (stats == null) return;
+
+            for (Map.Entry<String, Integer> entry : stats.entrySet()) {
+                try {
+                    org.bukkit.Statistic stat = org.bukkit.Statistic.valueOf(entry.getKey());
+                    if (stat.getType() == org.bukkit.Statistic.Type.UNTYPED) {
+                        player.setStatistic(stat, entry.getValue());
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            LOGGER.fine("Статистика восстановлена для " + username);
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Ошибка восстановления статистики для " + username, e);
+        }
+    }
+
+    // === НОВОЕ: Методы сериализации рецептов ===
+
+    private String serializeRecipes(Player player) {
+        try {
+            Set<String> recipes = new HashSet<>();
+
+            for (org.bukkit.NamespacedKey key : player.getDiscoveredRecipes()) {
+                recipes.add(key.toString());
+            }
+
+            return GSON.toJson(recipes);
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Ошибка сериализации рецептов для " + username, e);
+            return null;
+        }
+    }
+
+    private void deserializeRecipes(Player player, String data) {
+        try {
+            Set<String> recipes = GSON.fromJson(
+                    data,
+                    new TypeToken<Set<String>>(){}.getType()
+            );
+
+            if (recipes == null) return;
+
+            for (String recipeStr : recipes) {
+                org.bukkit.NamespacedKey key = org.bukkit.NamespacedKey.fromString(recipeStr);
+                if (key != null) {
+                    player.discoverRecipe(key);
+                }
+            }
+
+            LOGGER.fine("Рецепты восстановлены для " + username);
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Ошибка восстановления рецептов для " + username, e);
+        }
+    }
+
+    // === НОВОЕ: Методы сериализации эффектов ===
+
+    private String serializePotionEffects(Player player) {
+        try {
+            List<Map<String, Object>> effects = new ArrayList<>();
+
+            for (org.bukkit.potion.PotionEffect effect : player.getActivePotionEffects()) {
+                Map<String, Object> effectData = new HashMap<>();
+                effectData.put("type", effect.getType().getName());
+                effectData.put("duration", effect.getDuration());
+                effectData.put("amplifier", effect.getAmplifier());
+                effectData.put("ambient", effect.isAmbient());
+                effectData.put("particles", effect.hasParticles());
+                effectData.put("icon", effect.hasIcon());
+                effects.add(effectData);
+            }
+
+            return GSON.toJson(effects);
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Ошибка сериализации эффектов для " + username, e);
+            return null;
+        }
+    }
+
+    private void deserializePotionEffects(Player player, String data) {
+        try {
+            List<Map<String, Object>> effects = GSON.fromJson(
+                    data,
+                    new TypeToken<List<Map<String, Object>>>(){}.getType()
+            );
+
+            if (effects == null) return;
+
+            // Удаляем старые эффекты
+            for (org.bukkit.potion.PotionEffect effect : player.getActivePotionEffects()) {
+                player.removePotionEffect(effect.getType());
+            }
+
+            // Применяем сохраненные
+            for (Map<String, Object> effectData : effects) {
+                String typeName = (String) effectData.get("type");
+                org.bukkit.potion.PotionEffectType type = org.bukkit.potion.PotionEffectType.getByName(typeName);
+
+                if (type != null) {
+                    int duration = ((Number) effectData.get("duration")).intValue();
+                    int amplifier = ((Number) effectData.get("amplifier")).intValue();
+                    boolean ambient = (Boolean) effectData.get("ambient");
+                    boolean particles = (Boolean) effectData.get("particles");
+                    boolean icon = (Boolean) effectData.get("icon");
+
+                    org.bukkit.potion.PotionEffect effect = new org.bukkit.potion.PotionEffect(
+                            type, duration, amplifier, ambient, particles, icon
+                    );
+                    player.addPotionEffect(effect);
+                }
+            }
+
+            LOGGER.fine("Эффекты зелий восстановлены для " + username);
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Ошибка восстановления эффектов для " + username, e);
+        }
+    }
+
     // Создание данных для нового игрока
     public static PlayerData createNewPlayer(String username, String passwordHash, String salt, UUID crackedUuid) {
         PlayerData data = new PlayerData(username);
@@ -300,7 +551,6 @@ public class PlayerData {
         data.registrationDate = System.currentTimeMillis();
         data.lastLogin = System.currentTimeMillis();
 
-        // Значения по умолчанию для нового игрока
         data.worldName = "world";
         data.x = 0;
         data.y = 64;
@@ -317,7 +567,6 @@ public class PlayerData {
         return data;
     }
 
-    // Валидация данных
     public boolean isValid() {
         return username != null && !username.isEmpty()
                 && passwordHash != null && !passwordHash.isEmpty()
@@ -391,6 +640,19 @@ public class PlayerData {
 
     public String getGameMode() { return gameMode; }
     public void setGameMode(String gameMode) { this.gameMode = gameMode; }
+
+    // НОВОЕ: Геттеры и сеттеры для расширенных данных
+    public String getAdvancementsData() { return advancementsData; }
+    public void setAdvancementsData(String advancementsData) { this.advancementsData = advancementsData; }
+
+    public String getStatisticsData() { return statisticsData; }
+    public void setStatisticsData(String statisticsData) { this.statisticsData = statisticsData; }
+
+    public String getRecipesData() { return recipesData; }
+    public void setRecipesData(String recipesData) { this.recipesData = recipesData; }
+
+    public String getPotionEffectsData() { return potionEffectsData; }
+    public void setPotionEffectsData(String potionEffectsData) { this.potionEffectsData = potionEffectsData; }
 
     public long getCreatedAt() { return createdAt; }
     public void setCreatedAt(long createdAt) { this.createdAt = createdAt; }

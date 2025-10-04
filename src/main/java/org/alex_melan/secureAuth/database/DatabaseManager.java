@@ -32,7 +32,6 @@ public class DatabaseManager {
 
     private void setupDatabase() {
         try {
-            // Убеждаемся что папка плагина существует
             File pluginDir = plugin.getDataFolder();
             if (!pluginDir.exists()) {
                 pluginDir.mkdirs();
@@ -43,32 +42,27 @@ public class DatabaseManager {
 
             HikariConfig config = new HikariConfig();
 
-            // SQLite конфигурация
             config.setJdbcUrl("jdbc:sqlite:" + dbPath);
             config.setDriverClassName("org.sqlite.JDBC");
 
-            // Оптимизация для SQLite
-            config.setMaximumPoolSize(1); // SQLite лучше работает с одним соединением
+            config.setMaximumPoolSize(1);
             config.setMinimumIdle(1);
             config.setConnectionTimeout(30000);
             config.setIdleTimeout(600000);
             config.setMaxLifetime(1800000);
             config.setLeakDetectionThreshold(60000);
 
-            // SQLite специфичные настройки
             config.addDataSourceProperty("foreign_keys", "true");
             config.addDataSourceProperty("journal_mode", "WAL");
             config.addDataSourceProperty("synchronous", "NORMAL");
             config.addDataSourceProperty("cache_size", "10000");
             config.addDataSourceProperty("temp_store", "memory");
 
-            // Проверка соединения
             config.setConnectionTestQuery("SELECT 1");
             config.setValidationTimeout(5000);
 
             dataSource = new HikariDataSource(config);
 
-            // Тестируем соединение
             try (Connection testConn = dataSource.getConnection()) {
                 plugin.getLogger().info("Тестовое соединение с базой данных успешно");
             }
@@ -82,10 +76,8 @@ public class DatabaseManager {
 
     private void createTables() throws SQLException {
         try (Connection conn = dataSource.getConnection()) {
-            // Включаем внешние ключи
             conn.createStatement().execute("PRAGMA foreign_keys = ON");
 
-            // Таблица игроков
             conn.createStatement().executeUpdate("""
                 CREATE TABLE IF NOT EXISTS players (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -116,7 +108,6 @@ public class DatabaseManager {
                 )
             """);
 
-            // Таблица сессий
             conn.createStatement().executeUpdate("""
                 CREATE TABLE IF NOT EXISTS sessions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,7 +122,6 @@ public class DatabaseManager {
                 )
             """);
 
-            // Таблица логов безопасности
             conn.createStatement().executeUpdate("""
                 CREATE TABLE IF NOT EXISTS security_logs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -144,7 +134,6 @@ public class DatabaseManager {
                 )
             """);
 
-            // Индексы для оптимизации
             String[] indexes = {
                     "CREATE INDEX IF NOT EXISTS idx_players_username ON players(username)",
                     "CREATE INDEX IF NOT EXISTS idx_players_premium_uuid ON players(premium_uuid)",
@@ -162,7 +151,6 @@ public class DatabaseManager {
                 conn.createStatement().executeUpdate(index);
             }
 
-            // Триггеры для обновления updated_at
             conn.createStatement().executeUpdate("""
                 CREATE TRIGGER IF NOT EXISTS players_updated_at 
                 AFTER UPDATE ON players 
@@ -176,7 +164,6 @@ public class DatabaseManager {
         }
     }
 
-    // Логирование действий безопасности
     public CompletableFuture<Void> logSecurityAction(String username, String ipAddress,
                                                      String actionType, boolean success, String details) {
         return CompletableFuture.runAsync(() -> {
@@ -201,7 +188,6 @@ public class DatabaseManager {
         });
     }
 
-    // Асинхронные методы для работы с игроками
     public CompletableFuture<Boolean> isPlayerRegistered(String username) {
         return CompletableFuture.supplyAsync(() -> {
             try (Connection conn = dataSource.getConnection();
@@ -238,7 +224,6 @@ public class DatabaseManager {
 
                 boolean success = stmt.executeUpdate() > 0;
 
-                // Логируем регистрацию
                 logSecurityAction(username, "unknown", "REGISTER", success,
                         success ? "User registered successfully" : "Registration failed");
 
@@ -270,7 +255,6 @@ public class DatabaseManager {
                     boolean success = storedHash.equals(inputHash);
 
                     if (success) {
-                        // Обновляем данные последнего входа
                         updateLastLogin(username, ipAddress);
                         logSecurityAction(username, ipAddress, "LOGIN", true, "Successful authentication");
                     } else {
@@ -302,7 +286,26 @@ public class DatabaseManager {
                 ResultSet rs = stmt.executeQuery();
 
                 if (rs.next()) {
-                    return PlayerData.fromResultSet(rs);
+                    PlayerData data = PlayerData.fromResultSet(rs);
+
+                    // НОВОЕ: Загружаем расширенные данные если они есть
+                    try {
+                        data.setAdvancementsData(rs.getString("advancements_data"));
+                    } catch (SQLException ignored) {}
+
+                    try {
+                        data.setStatisticsData(rs.getString("statistics_data"));
+                    } catch (SQLException ignored) {}
+
+                    try {
+                        data.setRecipesData(rs.getString("recipes_data"));
+                    } catch (SQLException ignored) {}
+
+                    try {
+                        data.setPotionEffectsData(rs.getString("potion_effects_data"));
+                    } catch (SQLException ignored) {}
+
+                    return data;
                 }
 
                 return null;
@@ -321,7 +324,8 @@ public class DatabaseManager {
                      UPDATE players SET 
                          world_name = ?, x = ?, y = ?, z = ?, yaw = ?, pitch = ?,
                          inventory_data = ?, enderchest_data = ?, experience = ?, level = ?,
-                         health = ?, food = ?, saturation = ?, game_mode = ?
+                         health = ?, food = ?, saturation = ?, game_mode = ?,
+                         advancements_data = ?, statistics_data = ?, recipes_data = ?, potion_effects_data = ?
                      WHERE username = ? COLLATE NOCASE
                  """)) {
 
@@ -339,7 +343,14 @@ public class DatabaseManager {
                 stmt.setInt(12, playerData.getFood());
                 stmt.setFloat(13, playerData.getSaturation());
                 stmt.setString(14, playerData.getGameMode());
-                stmt.setString(15, playerData.getUsername().toLowerCase());
+
+                // НОВОЕ: Сохранение расширенных данных
+                stmt.setString(15, playerData.getAdvancementsData());
+                stmt.setString(16, playerData.getStatisticsData());
+                stmt.setString(17, playerData.getRecipesData());
+                stmt.setString(18, playerData.getPotionEffectsData());
+
+                stmt.setString(19, playerData.getUsername().toLowerCase());
 
                 stmt.executeUpdate();
 
@@ -349,11 +360,9 @@ public class DatabaseManager {
         });
     }
 
-    // Методы для работы с сессиями
     public CompletableFuture<String> createSession(String username, String ipAddress) {
         return CompletableFuture.supplyAsync(() -> {
             try (Connection conn = dataSource.getConnection()) {
-                // Удаляем старые сессии этого пользователя
                 try (PreparedStatement deleteStmt = conn.prepareStatement("""
                      UPDATE sessions SET is_active = 0 WHERE username = ? COLLATE NOCASE
                 """)) {
@@ -361,7 +370,6 @@ public class DatabaseManager {
                     deleteStmt.executeUpdate();
                 }
 
-                // Создаем новую сессию
                 try (PreparedStatement stmt = conn.prepareStatement("""
                      INSERT INTO sessions (session_hash, username, ip_address, created_at, expires_at, last_activity, is_active)
                      VALUES (?, ?, ?, ?, ?, ?, 1)
@@ -413,10 +421,8 @@ public class DatabaseManager {
                     boolean valid = System.currentTimeMillis() < expiresAt;
 
                     if (valid) {
-                        // Обновляем время последней активности
                         updateSessionActivity(sessionHash);
                     } else {
-                        // Деактивируем просроченную сессию
                         invalidateSession(sessionHash);
                     }
 
@@ -459,7 +465,6 @@ public class DatabaseManager {
             stmt.executeUpdate();
 
         } catch (SQLException e) {
-            // Логируем только если это не ошибка закрытого DataSource
             if (!e.getMessage().contains("has been closed")) {
                 plugin.getLogger().log(Level.WARNING, "Ошибка синхронной деактивации сессии", e);
             }
@@ -501,8 +506,7 @@ public class DatabaseManager {
     public CompletableFuture<Void> cleanExpiredSessions() {
         return CompletableFuture.runAsync(() -> {
             try (Connection conn = dataSource.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement(
-                         "UPDATE sessions SET is_active = 0 WHERE expires_at < ? AND is_active = 1")) {
+                 PreparedStatement stmt = conn.prepareStatement("UPDATE sessions SET is_active = 0 WHERE expires_at < ? AND is_active = 1")) {
 
                 long now = System.currentTimeMillis();
                 stmt.setLong(1, now);
@@ -521,7 +525,6 @@ public class DatabaseManager {
         });
     }
 
-    // Объединение UUID для лицензионных и пиратских аккаунтов
     public CompletableFuture<Boolean> linkPremiumAccount(String username, UUID premiumUuid) {
         return CompletableFuture.supplyAsync(() -> {
             try (Connection conn = dataSource.getConnection();
@@ -546,6 +549,36 @@ public class DatabaseManager {
         });
     }
 
+    // НОВОЕ: Обновление UUID игрока (для питомцев)
+    public CompletableFuture<Boolean> updatePlayerUUID(String username, UUID newUUID) {
+        return CompletableFuture.supplyAsync(() -> {
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(
+                         "UPDATE players SET cracked_uuid = ? WHERE username = ? COLLATE NOCASE"
+                 )) {
+
+                stmt.setString(1, newUUID.toString());
+                stmt.setString(2, username.toLowerCase());
+
+                boolean success = stmt.executeUpdate() > 0;
+
+                if (success) {
+                    plugin.getLogger().info("UUID обновлен для игрока " + username + ": " + newUUID);
+
+                    logSecurityAction(username, "system", "UUID_UPDATE", true,
+                            "Cracked UUID updated to: " + newUUID);
+                }
+
+                return success;
+
+            } catch (SQLException e) {
+                plugin.getLogger().log(Level.SEVERE,
+                        "Ошибка обновления UUID для игрока " + username, e);
+                return false;
+            }
+        });
+    }
+
     private void updateLastLogin(String username, String ipAddress) {
         CompletableFuture.runAsync(() -> {
             try (Connection conn = dataSource.getConnection();
@@ -564,7 +597,6 @@ public class DatabaseManager {
         });
     }
 
-    // Статистика
     public CompletableFuture<Integer> getActiveSessionsCount() {
         return CompletableFuture.supplyAsync(() -> {
             try (Connection conn = dataSource.getConnection();
@@ -588,7 +620,6 @@ public class DatabaseManager {
         });
     }
 
-    // Метод для получения соединения (для миграций)
     public Connection getConnection() throws SQLException {
         if (dataSource == null) {
             throw new SQLException("DataSource не инициализирован");

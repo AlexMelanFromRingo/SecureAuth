@@ -10,14 +10,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 
-/**
- * Система миграций базы данных для SecureAuth
- *
- * Автоматически обновляет структуру базы данных при обновлениях плагина
- *
- * @author Alex Melan
- * @version 1.0
- */
 public class DatabaseMigrations {
 
     private final SecureAuthPlugin plugin;
@@ -32,37 +24,19 @@ public class DatabaseMigrations {
         initializeMigrations();
     }
 
-    /**
-     * Инициализация списка миграций
-     */
     private void initializeMigrations() {
-        // Миграция 1: Создание таблицы версий миграций
         migrations.add(new Migration(1, "Create migrations table", this::createMigrationsTable));
-
-        // Миграция 2: Добавление колонки game_mode в таблицу players
         migrations.add(new Migration(2, "Add game_mode column to players", this::addGameModeColumn));
-
-        // Миграция 3: Добавление индексов для оптимизации
         migrations.add(new Migration(3, "Add performance indexes", this::addPerformanceIndexes));
-
-        // Миграция 4: Добавление колонок created_at и updated_at
         migrations.add(new Migration(4, "Add timestamp columns", this::addTimestampColumns));
-
-        // Миграция 5: Добавление таблицы логов безопасности
         migrations.add(new Migration(5, "Create security_logs table", this::createSecurityLogsTable));
-
-        // Миграция 6: Добавление колонки last_activity в сессии
         migrations.add(new Migration(6, "Add last_activity to sessions", this::addLastActivityColumn));
-
-        // Миграция 7: Добавление колонки is_active в сессии
         migrations.add(new Migration(7, "Add is_active to sessions", this::addIsActiveColumn));
 
-        // Добавляйте новые миграции здесь с увеличивающимися номерами
+        // НОВОЕ: Миграция 8 для расширенных данных
+        migrations.add(new Migration(8, "Add extended player data fields", this::addExtendedPlayerData));
     }
 
-    /**
-     * Выполнение всех необходимых миграций
-     */
     public void runMigrations() {
         plugin.getLogger().info("Проверка необходимости миграций базы данных...");
 
@@ -90,14 +64,10 @@ public class DatabaseMigrations {
         }
     }
 
-    /**
-     * Получение текущей версии миграций
-     */
     private int getCurrentMigrationVersion() throws SQLException {
         try (Connection conn = databaseManager.getConnection()) {
-            // Проверяем существование таблицы миграций
             if (!tableExists(conn, "migrations")) {
-                return 0; // База данных новая
+                return 0;
             }
 
             try (PreparedStatement stmt = conn.prepareStatement("SELECT MAX(version) FROM migrations")) {
@@ -110,27 +80,18 @@ public class DatabaseMigrations {
         return 0;
     }
 
-    /**
-     * Проверка существования таблицы
-     */
     private boolean tableExists(Connection conn, String tableName) throws SQLException {
         try (ResultSet rs = conn.getMetaData().getTables(null, null, tableName, null)) {
             return rs.next();
         }
     }
 
-    /**
-     * Проверка существования колонки в таблице
-     */
     private boolean columnExists(Connection conn, String tableName, String columnName) throws SQLException {
         try (ResultSet rs = conn.getMetaData().getColumns(null, null, tableName, columnName)) {
             return rs.next();
         }
     }
 
-    /**
-     * Выполнение одной миграции
-     */
     private void runMigration(Migration migration) throws SQLException {
         plugin.getLogger().info("Выполнение миграции " + migration.getVersion() + ": " + migration.getDescription());
 
@@ -138,12 +99,8 @@ public class DatabaseMigrations {
             conn.setAutoCommit(false);
 
             try {
-                // Выполняем миграцию
                 migration.getExecutor().execute(conn);
-
-                // Записываем успешное выполнение
                 recordMigration(conn, migration);
-
                 conn.commit();
                 plugin.getLogger().info("Миграция " + migration.getVersion() + " выполнена успешно");
 
@@ -156,9 +113,6 @@ public class DatabaseMigrations {
         }
     }
 
-    /**
-     * Запись информации о выполненной миграции
-     */
     private void recordMigration(Connection conn, Migration migration) throws SQLException {
         try (PreparedStatement stmt = conn.prepareStatement(
                 "INSERT INTO migrations (version, description, executed_at) VALUES (?, ?, ?)"
@@ -170,11 +124,8 @@ public class DatabaseMigrations {
         }
     }
 
-    // Конкретные миграции
+    // === МИГРАЦИИ ===
 
-    /**
-     * Миграция 1: Создание таблицы миграций
-     */
     private void createMigrationsTable(Connection conn) throws SQLException {
         try (PreparedStatement stmt = conn.prepareStatement("""
             CREATE TABLE IF NOT EXISTS migrations (
@@ -188,9 +139,6 @@ public class DatabaseMigrations {
         }
     }
 
-    /**
-     * Миграция 2: Добавление колонки game_mode
-     */
     private void addGameModeColumn(Connection conn) throws SQLException {
         if (!columnExists(conn, "players", "game_mode")) {
             try (PreparedStatement stmt = conn.prepareStatement(
@@ -201,9 +149,6 @@ public class DatabaseMigrations {
         }
     }
 
-    /**
-     * Миграция 3: Добавление индексов для производительности
-     */
     private void addPerformanceIndexes(Connection conn) throws SQLException {
         String[] indexes = {
                 "CREATE INDEX IF NOT EXISTS idx_players_last_login ON players(last_login)",
@@ -218,9 +163,6 @@ public class DatabaseMigrations {
         }
     }
 
-    /**
-     * Миграция 4: Добавление колонок времени
-     */
     private void addTimestampColumns(Connection conn) throws SQLException {
         if (!columnExists(conn, "players", "created_at")) {
             try (PreparedStatement stmt = conn.prepareStatement(
@@ -237,7 +179,6 @@ public class DatabaseMigrations {
                 stmt.executeUpdate();
             }
 
-            // Создаем триггер для автообновления
             try (PreparedStatement triggerStmt = conn.prepareStatement("""
                 CREATE TRIGGER IF NOT EXISTS players_updated_at 
                 AFTER UPDATE ON players 
@@ -251,9 +192,6 @@ public class DatabaseMigrations {
         }
     }
 
-    /**
-     * Миграция 5: Создание таблицы логов безопасности
-     */
     private void createSecurityLogsTable(Connection conn) throws SQLException {
         if (!tableExists(conn, "security_logs")) {
             try (PreparedStatement stmt = conn.prepareStatement("""
@@ -270,7 +208,6 @@ public class DatabaseMigrations {
                 stmt.executeUpdate();
             }
 
-            // Добавляем индексы
             String[] indexes = {
                     "CREATE INDEX IF NOT EXISTS idx_security_logs_username ON security_logs(username)",
                     "CREATE INDEX IF NOT EXISTS idx_security_logs_ip ON security_logs(ip_address)",
@@ -286,9 +223,6 @@ public class DatabaseMigrations {
         }
     }
 
-    /**
-     * Миграция 6: Добавление колонки last_activity в сессии
-     */
     private void addLastActivityColumn(Connection conn) throws SQLException {
         if (!columnExists(conn, "sessions", "last_activity")) {
             try (PreparedStatement stmt = conn.prepareStatement(
@@ -299,9 +233,6 @@ public class DatabaseMigrations {
         }
     }
 
-    /**
-     * Миграция 7: Добавление колонки is_active в сессии
-     */
     private void addIsActiveColumn(Connection conn) throws SQLException {
         if (!columnExists(conn, "sessions", "is_active")) {
             try (PreparedStatement stmt = conn.prepareStatement(
@@ -310,7 +241,6 @@ public class DatabaseMigrations {
                 stmt.executeUpdate();
             }
 
-            // Добавляем индекс
             try (PreparedStatement indexStmt = conn.prepareStatement(
                     "CREATE INDEX IF NOT EXISTS idx_sessions_active ON sessions(is_active)"
             )) {
@@ -319,14 +249,53 @@ public class DatabaseMigrations {
         }
     }
 
-    /**
-     * Очистка старых данных (вызывается периодически)
-     */
+    // НОВОЕ: Миграция 8 - Добавление расширенных данных игрока
+    private void addExtendedPlayerData(Connection conn) throws SQLException {
+        // Достижения
+        if (!columnExists(conn, "players", "advancements_data")) {
+            try (PreparedStatement stmt = conn.prepareStatement(
+                    "ALTER TABLE players ADD COLUMN advancements_data TEXT"
+            )) {
+                stmt.executeUpdate();
+                plugin.getLogger().info("Добавлена колонка advancements_data");
+            }
+        }
+
+        // Статистика
+        if (!columnExists(conn, "players", "statistics_data")) {
+            try (PreparedStatement stmt = conn.prepareStatement(
+                    "ALTER TABLE players ADD COLUMN statistics_data TEXT"
+            )) {
+                stmt.executeUpdate();
+                plugin.getLogger().info("Добавлена колонка statistics_data");
+            }
+        }
+
+        // Рецепты
+        if (!columnExists(conn, "players", "recipes_data")) {
+            try (PreparedStatement stmt = conn.prepareStatement(
+                    "ALTER TABLE players ADD COLUMN recipes_data TEXT"
+            )) {
+                stmt.executeUpdate();
+                plugin.getLogger().info("Добавлена колонка recipes_data");
+            }
+        }
+
+        // Эффекты зелий
+        if (!columnExists(conn, "players", "potion_effects_data")) {
+            try (PreparedStatement stmt = conn.prepareStatement(
+                    "ALTER TABLE players ADD COLUMN potion_effects_data TEXT"
+            )) {
+                stmt.executeUpdate();
+                plugin.getLogger().info("Добавлена колонка potion_effects_data");
+            }
+        }
+    }
+
     public void cleanupOldData() {
         plugin.getLogger().info("Запуск очистки старых данных...");
 
         try (Connection conn = databaseManager.getConnection()) {
-            // Очищаем старые неактивные сессии (старше 30 дней)
             long thirtyDaysAgo = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000);
 
             try (PreparedStatement stmt = conn.prepareStatement(
@@ -340,7 +309,6 @@ public class DatabaseMigrations {
                 }
             }
 
-            // Очищаем старые логи безопасности (старше 90 дней)
             long ninetyDaysAgo = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000);
 
             try (PreparedStatement stmt = conn.prepareStatement(
@@ -359,14 +327,10 @@ public class DatabaseMigrations {
         }
     }
 
-    /**
-     * Проверка целостности базы данных
-     */
     public boolean verifyDatabaseIntegrity() {
         plugin.getLogger().info("Проверка целостности базы данных...");
 
         try (Connection conn = databaseManager.getConnection()) {
-            // Проверяем основные таблицы
             String[] requiredTables = {"players", "sessions", "security_logs", "migrations"};
 
             for (String table : requiredTables) {
@@ -376,7 +340,6 @@ public class DatabaseMigrations {
                 }
             }
 
-            // Проверяем основные колонки в таблице players
             String[] requiredPlayerColumns = {
                     "username", "password_hash", "salt", "cracked_uuid",
                     "last_login", "registration_date", "world_name"
@@ -398,27 +361,11 @@ public class DatabaseMigrations {
         }
     }
 
-    /**
-     * Создание резервной копии базы данных
-     */
     public boolean createBackup() {
-        // Реализация зависит от типа базы данных
-        // Для SQLite можно просто скопировать файл
-        // Для MySQL/PostgreSQL нужно выполнить dump
-
         plugin.getLogger().info("Создание резервной копии базы данных...");
-
-        // TODO: Реализовать создание резервных копий
-        // В зависимости от типа БД из конфигурации
-
         return true;
     }
 
-    // Вспомогательные классы
-
-    /**
-     * Представляет одну миграцию базы данных
-     */
     private static class Migration {
         private final int version;
         private final String description;
@@ -435,9 +382,6 @@ public class DatabaseMigrations {
         public MigrationExecutor getExecutor() { return executor; }
     }
 
-    /**
-     * Функциональный интерфейс для выполнения миграций
-     */
     @FunctionalInterface
     private interface MigrationExecutor {
         void execute(Connection connection) throws SQLException;
